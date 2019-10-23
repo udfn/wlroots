@@ -112,6 +112,8 @@ struct wlr_surface {
 	struct wl_listener renderer_destroy;
 
 	void *data;
+	// Immediately damage this output when this surface is committed.
+	struct wlr_output_damage *immediate_commit_output;
 };
 
 struct wlr_subsurface_state {

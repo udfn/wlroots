@@ -113,7 +113,7 @@ static bool output_attach_buffer(struct wlr_output *wlr_output,
 	return true;
 }
 
-static bool output_commit(struct wlr_output *wlr_output) {
+static bool output_commit(struct wlr_output *wlr_output, bool immediate) {
 	struct wlr_wl_output *output =
 		get_wl_output_from_output(wlr_output);
 

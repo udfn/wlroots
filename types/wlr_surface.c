@@ -8,6 +8,7 @@
 #include <wlr/types/wlr_region.h>
 #include <wlr/types/wlr_surface.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_damage.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include "util/signal.h"
@@ -373,6 +374,9 @@ static void surface_commit_pending(struct wlr_surface *surface) {
 	}
 
 	wlr_signal_emit_safe(&surface->events.commit, surface);
+	if (surface->immediate_commit_output) {
+		wlr_signal_emit_safe(&surface->immediate_commit_output->events.frame, surface->immediate_commit_output);
+	}
 }
 
 static bool subsurface_is_synchronized(struct wlr_subsurface *subsurface) {
@@ -632,6 +636,8 @@ struct wlr_surface *wlr_surface_create(struct wl_client *client,
 	} else {
 		wl_list_init(resource_link);
 	}
+
+	surface->immediate_commit_output = NULL;
 
 	return surface;
 }

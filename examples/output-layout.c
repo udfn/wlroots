@@ -136,7 +136,7 @@ void output_frame_notify(struct wl_listener *listener, void *data) {
 	}
 
 	wlr_renderer_end(sample->renderer);
-	wlr_output_commit(wlr_output);
+	wlr_output_commit(wlr_output,false);
 }
 
 static void update_velocities(struct sample_state *sample,

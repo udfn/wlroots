@@ -99,7 +99,7 @@ static bool output_attach_render(struct wlr_output *wlr_output,
 	return wlr_egl_make_current(&x11->egl, output->surf, buffer_age);
 }
 
-static bool output_commit(struct wlr_output *wlr_output) {
+static bool output_commit(struct wlr_output *wlr_output, bool immediate) {
 	struct wlr_x11_output *output = get_x11_output_from_output(wlr_output);
 	struct wlr_x11_backend *x11 = output->x11;
 

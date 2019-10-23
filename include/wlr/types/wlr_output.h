@@ -150,6 +150,7 @@ struct wlr_output {
 	void *data;
 
 	bool block_idle_frame;
+	bool no_scheduled_frames;
 };
 
 struct wlr_output_event_precommit {
@@ -268,10 +269,11 @@ void wlr_output_set_damage(struct wlr_output *output,
 /**
  * Commit the pending output state. If `wlr_output_attach_render` has been
  * called, the pending frame will be submitted for display.
+ * If immediate is true, commits the state immediately (don't wait for vblank)
  *
  * This function schedules a `frame` event.
  */
-bool wlr_output_commit(struct wlr_output *output);
+bool wlr_output_commit(struct wlr_output *output, bool immediate);
 /**
  * Manually schedules a `frame` event. If a `frame` event is already pending,
  * it is a no-op.

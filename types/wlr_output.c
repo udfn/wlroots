@@ -458,7 +458,7 @@ static void output_state_clear(struct wlr_output_state *state) {
 	state->committed = 0;
 }
 
-bool wlr_output_commit(struct wlr_output *output) {
+bool wlr_output_commit(struct wlr_output *output, bool immediate) {
 	if (output->frame_pending) {
 		wlr_log(WLR_ERROR, "Tried to commit when a frame is pending");
 		return false;
@@ -482,7 +482,7 @@ bool wlr_output_commit(struct wlr_output *output) {
 	};
 	wlr_signal_emit_safe(&output->events.precommit, &event);
 
-	if (!output->impl->commit(output)) {
+	if (!output->impl->commit(output,immediate)) {
 		output_state_clear(&output->pending);
 		return false;
 	}
@@ -543,8 +543,8 @@ void wlr_output_send_frame(struct wlr_output *output) {
 static void schedule_frame_handle_idle_timer(void *data) {
 	struct wlr_output *output = data;
 	output->idle_frame = NULL;
-	if (!output->frame_pending && output->impl->schedule_frame
-			&& !output->block_idle_frame) {
+	if ((!output->frame_pending && output->impl->schedule_frame
+			&& !output->block_idle_frame) && !output->no_scheduled_frames) {
 		// Ask the backend to send a frame event when appropriate
 		if (output->impl->schedule_frame(output)) {
 			output->frame_pending = true;
@@ -553,7 +553,7 @@ static void schedule_frame_handle_idle_timer(void *data) {
 }
 
 void wlr_output_schedule_frame(struct wlr_output *output) {
-	if (output->frame_pending || output->idle_frame != NULL) {
+	if (output->frame_pending || output->idle_frame != NULL || output->no_scheduled_frames) {
 		return;
 	}
 
@@ -612,6 +612,9 @@ bool wlr_output_export_dmabuf(struct wlr_output *output,
 }
 
 void wlr_output_update_needs_frame(struct wlr_output *output) {
+	if (output->no_scheduled_frames) {
+		return;
+	}
 	output->needs_frame = true;
 	wlr_signal_emit_safe(&output->events.needs_frame, output);
 }

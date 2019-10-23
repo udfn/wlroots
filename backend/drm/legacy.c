@@ -6,9 +6,9 @@
 #include "backend/drm/iface.h"
 #include "backend/drm/util.h"
 
-static bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
+bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
 		struct wlr_drm_connector *conn, struct wlr_drm_crtc *crtc,
-		uint32_t fb_id, drmModeModeInfo *mode) {
+		uint32_t fb_id, drmModeModeInfo *mode, bool immediate) {
 	if (mode) {
 		if (drmModeSetCrtc(drm->fd, crtc->id, fb_id, 0, 0,
 				&conn->id, 1, mode)) {
@@ -16,8 +16,11 @@ static bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
 			return false;
 		}
 	}
-
-	if (drmModePageFlip(drm->fd, crtc->id, fb_id, DRM_MODE_PAGE_FLIP_EVENT, drm)) {
+	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
+	conn->crtc->pageflip_immediate = immediate;
+	if (immediate)
+		flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+	if (drmModePageFlip(drm->fd, crtc->id, fb_id, flags, drm)) {
 		wlr_log_errno(WLR_ERROR, "%s: Failed to page flip", conn->output.name);
 		return false;
 	}

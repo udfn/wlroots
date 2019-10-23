@@ -57,7 +57,7 @@ static bool output_attach_render(struct wlr_output *wlr_output,
 		buffer_age);
 }
 
-static bool output_commit(struct wlr_output *wlr_output) {
+static bool output_commit(struct wlr_output *wlr_output, bool immediate) {
 	// Nothing needs to be done for pbuffers
 	wlr_output_send_present(wlr_output, NULL);
 	return true;
