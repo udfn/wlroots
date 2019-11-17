@@ -100,7 +100,7 @@ void output_frame_notify(struct wl_listener *listener, void *data) {
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	wlr_output_render_software_cursors(wlr_output, NULL);
-	wlr_output_commit(wlr_output,false);
+	wlr_output_commit(wlr_output, WLR_OUTPUT_PRESENT_MODE_NORMAL);
 }
 
 static void handle_cursor_motion(struct wl_listener *listener, void *data) {

@@ -334,7 +334,7 @@ static bool drm_connector_attach_render(struct wlr_output *output,
 	return make_drm_surface_current(&conn->crtc->primary->surf, buffer_age);
 }
 
-static bool drm_connector_commit(struct wlr_output *output, bool immediate) {
+static bool drm_connector_commit(struct wlr_output *output, enum wlr_output_present_mode present_mode) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
 	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
 	if (!drm->session->active) {
@@ -401,7 +401,7 @@ static bool drm_connector_commit(struct wlr_output *output, bool immediate) {
 		return false;
 	}
 
-	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL, immediate)) {
+	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL, present_mode)) {
 		return false;
 	}
 

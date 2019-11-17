@@ -99,13 +99,13 @@ static void set_plane_props(struct atomic *atom, struct wlr_drm_plane *plane,
 
 bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
 		struct wlr_drm_connector *conn, struct wlr_drm_crtc *crtc,
-		uint32_t fb_id, drmModeModeInfo *mode, bool immediate);
+		uint32_t fb_id, drmModeModeInfo *mode, enum wlr_output_present_mode present_mode);
 
 static bool atomic_crtc_pageflip(struct wlr_drm_backend *drm,
 		struct wlr_drm_connector *conn,
 		struct wlr_drm_crtc *crtc,
 		uint32_t fb_id, drmModeModeInfo *mode,
-		bool immediate) {
+		enum wlr_output_present_mode present_mode) {
 	if (mode != NULL) {
 		if (crtc->mode_id != 0) {
 			drmModeDestroyPropertyBlob(drm->fd, crtc->mode_id);
@@ -116,9 +116,9 @@ static bool atomic_crtc_pageflip(struct wlr_drm_backend *drm,
 			wlr_log_errno(WLR_ERROR, "Unable to create property blob");
 			return false;
 		}
-	} else if (immediate) {
+	} else if (present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
 		// AMS doesn't support async pageflips (yet?), so legacy it is.
-		return legacy_crtc_pageflip(drm,conn,crtc,fb_id,mode,immediate);
+		return legacy_crtc_pageflip(drm,conn,crtc,fb_id,mode,present_mode);
 	}
 
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
@@ -126,12 +126,12 @@ static bool atomic_crtc_pageflip(struct wlr_drm_backend *drm,
 		flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
 	} else {
 		flags |= DRM_MODE_ATOMIC_NONBLOCK;
-		if (immediate) {
+		if (present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
 			flags |= DRM_MODE_PAGE_FLIP_ASYNC;
 		}
 	}
 
-	conn->crtc->pageflip_immediate = immediate;
+	conn->crtc->pageflip_immediate = present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE;
 	struct atomic atom;
 	atomic_begin(crtc, &atom);
 	atomic_add(&atom, conn->id, conn->props.crtc_id, crtc->id);

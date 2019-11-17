@@ -88,7 +88,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 	}
 
 	wlr_renderer_end(sample->renderer);
-	wlr_output_commit(wlr_output,false);
+	wlr_output_commit(wlr_output, WLR_OUTPUT_PRESENT_MODE_NORMAL);
 	sample->last_frame = now;
 }
 

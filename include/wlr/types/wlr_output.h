@@ -269,14 +269,21 @@ bool wlr_output_preferred_read_format(struct wlr_output *output,
  */
 void wlr_output_set_damage(struct wlr_output *output,
 	pixman_region32_t *damage);
+
+enum wlr_output_present_mode {
+	// The standard present mode, waits for vblank before showing.
+	WLR_OUTPUT_PRESENT_MODE_NORMAL = 0x1,
+	// Immediately present the pending frame without waiting for vblank.
+	WLR_OUTPUT_PRESENT_MODE_IMMEDIATE = 0x2,
+};
+
 /**
  * Commit the pending output state. If `wlr_output_attach_render` has been
  * called, the pending frame will be submitted for display.
- * If immediate is true, commits the state immediately (don't wait for vblank)
  *
  * This function schedules a `frame` event.
  */
-bool wlr_output_commit(struct wlr_output *output, bool immediate);
+bool wlr_output_commit(struct wlr_output *output, enum wlr_output_present_mode present_mode);
 /**
  * Manually schedules a `frame` event. If a `frame` event is already pending,
  * it is a no-op.

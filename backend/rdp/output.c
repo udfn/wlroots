@@ -166,7 +166,7 @@ static bool nsc_swap_buffers(
 	return true;
 }
 
-static bool output_commit(struct wlr_output *wlr_output) {
+static bool output_commit(struct wlr_output *wlr_output, enum wlr_output_present_mode present_mode) {
 	struct wlr_rdp_output *output =
 		rdp_output_from_output(wlr_output);
 	bool ret = false;

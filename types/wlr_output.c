@@ -458,7 +458,7 @@ static void output_state_clear(struct wlr_output_state *state) {
 	state->committed = 0;
 }
 
-bool wlr_output_commit(struct wlr_output *output, bool immediate) {
+bool wlr_output_commit(struct wlr_output *output, enum wlr_output_present_mode present_mode) {
 	if (output->frame_pending) {
 		wlr_log(WLR_ERROR, "Tried to commit when a frame is pending");
 		return false;
@@ -482,7 +482,7 @@ bool wlr_output_commit(struct wlr_output *output, bool immediate) {
 	};
 	wlr_signal_emit_safe(&output->events.precommit, &event);
 
-	if (!output->impl->commit(output,immediate)) {
+	if (!output->impl->commit(output, present_mode)) {
 		output_state_clear(&output->pending);
 		return false;
 	}

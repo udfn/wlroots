@@ -108,7 +108,7 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 	}
 
 	wlr_renderer_end(renderer);
-	wlr_output_commit(output->wlr_output,false);
+	wlr_output_commit(output->wlr_output, WLR_OUTPUT_PRESENT_MODE_NORMAL);
 }
 
 static void output_set_surface(struct fullscreen_output *output,
