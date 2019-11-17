@@ -17,8 +17,8 @@ bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
 		}
 	}
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
-	conn->crtc->pageflip_immediate = present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE;
-	if (conn->crtc->pageflip_immediate)
+	conn->output.last_present_mode = present_mode;
+	if (present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE)
 		flags |= DRM_MODE_PAGE_FLIP_ASYNC;
 	if (drmModePageFlip(drm->fd, crtc->id, fb_id, flags, drm)) {
 		wlr_log_errno(WLR_ERROR, "%s: Failed to page flip", conn->output.name);

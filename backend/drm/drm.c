@@ -937,7 +937,7 @@ static bool drm_connector_schedule_frame(struct wlr_output *output) {
 	}
 
 	uint32_t fb_id = get_fb_for_bo(bo, plane->drm_format, drm->addfb2_modifiers);
-	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL,false)) {
+	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL, output->last_present_mode)) {
 		return false;
 	}
 
@@ -1489,7 +1489,7 @@ static void page_flip_handler(int fd, unsigned seq,
 	int refresh;
 	uint32_t present_flags = WLR_OUTPUT_PRESENT_HW_CLOCK |
 		WLR_OUTPUT_PRESENT_HW_COMPLETION;
-	if (!conn->crtc->pageflip_immediate) {
+	if (conn->output.last_present_mode != WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
 		present_flags |= WLR_OUTPUT_PRESENT_VSYNC;
 		refresh = mhz_to_nsec(conn->output.refresh);
 	} else {

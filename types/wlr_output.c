@@ -338,6 +338,7 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	wl_display_add_destroy_listener(display, &output->display_destroy);
 
 	output->frame_pending = true;
+	output->last_present_mode = WLR_OUTPUT_PRESENT_MODE_NORMAL;
 }
 
 void wlr_output_destroy(struct wlr_output *output) {
@@ -544,7 +545,7 @@ static void schedule_frame_handle_idle_timer(void *data) {
 	struct wlr_output *output = data;
 	output->idle_frame = NULL;
 	if ((!output->frame_pending && output->impl->schedule_frame
-			&& !output->block_idle_frame) && !output->no_scheduled_frames) {
+			&& !output->block_idle_frame)) {
 		// Ask the backend to send a frame event when appropriate
 		if (output->impl->schedule_frame(output)) {
 			output->frame_pending = true;
@@ -553,7 +554,7 @@ static void schedule_frame_handle_idle_timer(void *data) {
 }
 
 void wlr_output_schedule_frame(struct wlr_output *output) {
-	if (output->frame_pending || output->idle_frame != NULL || output->no_scheduled_frames) {
+	if (output->frame_pending || output->idle_frame != NULL) {
 		return;
 	}
 
@@ -613,7 +614,7 @@ bool wlr_output_export_dmabuf(struct wlr_output *output,
 }
 
 void wlr_output_update_needs_frame(struct wlr_output *output) {
-	if (output->no_scheduled_frames) {
+	if (output->last_present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
 		return;
 	}
 	output->needs_frame = true;

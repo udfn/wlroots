@@ -131,7 +131,7 @@ static bool atomic_crtc_pageflip(struct wlr_drm_backend *drm,
 		}
 	}
 
-	conn->crtc->pageflip_immediate = present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE;
+	conn->output.last_present_mode = present_mode;
 	struct atomic atom;
 	atomic_begin(crtc, &atom);
 	atomic_add(&atom, conn->id, conn->props.crtc_id, crtc->id);

@@ -150,7 +150,7 @@ struct wlr_output {
 	void *data;
 
 	bool block_idle_frame;
-	bool no_scheduled_frames;
+	uint32_t last_present_mode;
 };
 
 struct wlr_output_event_precommit {

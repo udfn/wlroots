@@ -63,8 +63,6 @@ struct wlr_drm_crtc {
 
 	uint16_t *gamma_table;
 	size_t gamma_table_size;
-	// Whether the pageflip is immediate (not vsync'd)
-	bool pageflip_immediate;
 };
 
 struct wlr_drm_backend {
