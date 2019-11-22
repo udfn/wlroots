@@ -34,6 +34,7 @@ add_project_arguments(cc.get_supported_arguments([
 	'-Wendif-labels',
 	'-Wstrict-aliasing=2',
 	'-Woverflow',
+	'-Wmissing-prototypes',
 
 	'-Wno-missing-braces',
 	'-Wno-missing-field-initializers',
@@ -213,8 +214,7 @@ message('\n'.join(summary))
 subdir('examples')
 
 pkgconfig = import('pkgconfig')
-pkgconfig.generate(
-	libraries: lib_wlr,
+pkgconfig.generate(lib_wlr,
 	version: meson.project_version(),
 	filebase: meson.project_name(),
 	name: meson.project_name(),

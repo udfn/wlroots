@@ -496,13 +496,14 @@ bool wlr_output_commit(struct wlr_output *output, enum wlr_output_present_mode p
 		wlr_surface_send_frame_done(cursor->surface, &now);
 	}
 
+	output->commit_seq++;
+
 	wlr_signal_emit_safe(&output->events.commit, output);
 
 	output->frame_pending = true;
 	output->needs_frame = false;
 	output_state_clear(&output->pending);
 	pixman_region32_clear(&output->damage);
-	output->commit_seq++;
 	return true;
 }
 
@@ -570,7 +571,7 @@ void wlr_output_send_present(struct wlr_output *output,
 	struct wlr_output_event_present _event = {0};
 	if (event == NULL) {
 		event = &_event;
-		event->commit_seq = output->commit_seq;
+		event->commit_seq = output->commit_seq + 1;
 	}
 
 	event->output = output;
