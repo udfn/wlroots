@@ -23,7 +23,7 @@ static bool output_attach_render(struct wlr_output *wlr_output,
 	return false;
 }
 
-static bool output_commit(struct wlr_output *wlr_output, enum wlr_output_present_mode present_mode) {
+static bool output_commit(struct wlr_output *wlr_output) {
 	return false;
 }
 

@@ -334,7 +334,7 @@ static bool drm_connector_attach_render(struct wlr_output *output,
 	return make_drm_surface_current(&conn->crtc->primary->surf, buffer_age);
 }
 
-static bool drm_connector_commit(struct wlr_output *output, enum wlr_output_present_mode present_mode) {
+static bool drm_connector_commit(struct wlr_output *output) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
 	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
 	if (!drm->session->active) {
@@ -401,7 +401,7 @@ static bool drm_connector_commit(struct wlr_output *output, enum wlr_output_pres
 		return false;
 	}
 
-	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL, present_mode)) {
+	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL)) {
 		return false;
 	}
 
@@ -516,7 +516,7 @@ static bool drm_connector_pageflip_renderer(struct wlr_drm_connector *conn,
 	struct gbm_bo *bo = get_drm_surface_front(
 		drm->parent ? &plane->mgpu_surf : &plane->surf);
 	uint32_t fb_id = get_fb_for_bo(bo, plane->drm_format, drm->addfb2_modifiers);
-	return drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, &mode->drm_mode,false);
+	return drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, &mode->drm_mode);
 }
 
 static void drm_connector_start_renderer(struct wlr_drm_connector *conn) {
@@ -937,7 +937,7 @@ static bool drm_connector_schedule_frame(struct wlr_output *output) {
 	}
 
 	uint32_t fb_id = get_fb_for_bo(bo, plane->drm_format, drm->addfb2_modifiers);
-	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL, output->last_present_mode)) {
+	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL)) {
 		return false;
 	}
 
@@ -1489,7 +1489,7 @@ static void page_flip_handler(int fd, unsigned seq,
 	int refresh;
 	uint32_t present_flags = WLR_OUTPUT_PRESENT_HW_CLOCK |
 		WLR_OUTPUT_PRESENT_HW_COMPLETION;
-	if (conn->output.last_present_mode != WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
+	if (conn->output.present_mode != WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
 		present_flags |= WLR_OUTPUT_PRESENT_VSYNC;
 		refresh = mhz_to_nsec(conn->output.refresh);
 	} else {

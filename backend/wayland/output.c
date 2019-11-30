@@ -162,7 +162,7 @@ static bool output_attach_buffer(struct wlr_output *wlr_output,
 	return true;
 }
 
-static bool output_commit(struct wlr_output *wlr_output, enum wlr_output_present_mode present_mode) {
+static bool output_commit(struct wlr_output *wlr_output) {
 	struct wlr_wl_output *output =
 		get_wl_output_from_output(wlr_output);
 

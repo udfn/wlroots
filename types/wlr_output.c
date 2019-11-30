@@ -338,7 +338,7 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	wl_display_add_destroy_listener(display, &output->display_destroy);
 
 	output->frame_pending = true;
-	output->last_present_mode = WLR_OUTPUT_PRESENT_MODE_NORMAL;
+	output->present_mode = WLR_OUTPUT_PRESENT_MODE_NORMAL;
 }
 
 void wlr_output_destroy(struct wlr_output *output) {
@@ -459,7 +459,7 @@ static void output_state_clear(struct wlr_output_state *state) {
 	state->committed = 0;
 }
 
-bool wlr_output_commit(struct wlr_output *output, enum wlr_output_present_mode present_mode) {
+bool wlr_output_commit(struct wlr_output *output) {
 	if (output->frame_pending) {
 		wlr_log(WLR_ERROR, "Tried to commit when a frame is pending");
 		return false;
@@ -483,7 +483,7 @@ bool wlr_output_commit(struct wlr_output *output, enum wlr_output_present_mode p
 	};
 	wlr_signal_emit_safe(&output->events.precommit, &event);
 
-	if (!output->impl->commit(output, present_mode)) {
+	if (!output->impl->commit(output)) {
 		output_state_clear(&output->pending);
 		return false;
 	}
@@ -555,7 +555,7 @@ static void schedule_frame_handle_idle_timer(void *data) {
 }
 
 void wlr_output_schedule_frame(struct wlr_output *output) {
-	if (output->frame_pending || output->idle_frame != NULL) {
+	if (output->frame_pending || output->idle_frame != NULL || output->present_mode != WLR_OUTPUT_PRESENT_MODE_NORMAL) {
 		return;
 	}
 
@@ -615,7 +615,7 @@ bool wlr_output_export_dmabuf(struct wlr_output *output,
 }
 
 void wlr_output_update_needs_frame(struct wlr_output *output) {
-	if (output->last_present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
+	if (output->present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
 		return;
 	}
 	output->needs_frame = true;

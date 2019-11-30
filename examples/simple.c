@@ -61,7 +61,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 	glClearColor(sample->color[0], sample->color[1], sample->color[2], 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	wlr_output_commit(sample_output->output, WLR_OUTPUT_PRESENT_MODE_NORMAL);
+	wlr_output_commit(sample_output->output);
 	sample->last_frame = now;
 }
 

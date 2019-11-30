@@ -71,7 +71,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 	}
 
 	wlr_renderer_end(sample->renderer);
-	wlr_output_commit(wlr_output, WLR_OUTPUT_PRESENT_MODE_NORMAL);
+	wlr_output_commit(wlr_output);
 
 	long ms = (now.tv_sec - sample->last_frame.tv_sec) * 1000 +
 		(now.tv_nsec - sample->last_frame.tv_nsec) / 1000000;

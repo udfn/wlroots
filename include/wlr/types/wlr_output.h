@@ -68,6 +68,13 @@ struct wlr_output_state {
 	struct wlr_buffer *buffer; // if WLR_OUTPUT_STATE_BUFFER_SCANOUT
 };
 
+enum wlr_output_present_mode {
+	// The standard present mode, waits for vblank before showing.
+	WLR_OUTPUT_PRESENT_MODE_NORMAL = 0x1,
+	// Immediately present the pending frame without waiting for vblank.
+	WLR_OUTPUT_PRESENT_MODE_IMMEDIATE = 0x2,
+};
+
 struct wlr_output_impl;
 
 /**
@@ -150,7 +157,7 @@ struct wlr_output {
 	void *data;
 
 	bool block_idle_frame;
-	uint32_t last_present_mode;
+	uint32_t present_mode; // enum wlr_output_present_mode
 };
 
 struct wlr_output_event_precommit {
@@ -270,20 +277,13 @@ bool wlr_output_preferred_read_format(struct wlr_output *output,
 void wlr_output_set_damage(struct wlr_output *output,
 	pixman_region32_t *damage);
 
-enum wlr_output_present_mode {
-	// The standard present mode, waits for vblank before showing.
-	WLR_OUTPUT_PRESENT_MODE_NORMAL = 0x1,
-	// Immediately present the pending frame without waiting for vblank.
-	WLR_OUTPUT_PRESENT_MODE_IMMEDIATE = 0x2,
-};
-
 /**
  * Commit the pending output state. If `wlr_output_attach_render` has been
  * called, the pending frame will be submitted for display.
  *
  * This function schedules a `frame` event.
  */
-bool wlr_output_commit(struct wlr_output *output, enum wlr_output_present_mode present_mode);
+bool wlr_output_commit(struct wlr_output *output);
 /**
  * Manually schedules a `frame` event. If a `frame` event is already pending,
  * it is a no-op.
