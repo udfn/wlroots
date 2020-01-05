@@ -334,12 +334,9 @@ static bool drm_connector_attach_render(struct wlr_output *output,
 	return make_drm_surface_current(&conn->crtc->primary->surf, buffer_age);
 }
 
-static bool drm_connector_commit(struct wlr_output *output) {
+static bool drm_connector_commit_buffer(struct wlr_output *output) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
 	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
-	if (!drm->session->active) {
-		return false;
-	}
 
 	struct wlr_drm_crtc *crtc = conn->crtc;
 	if (!crtc) {
@@ -412,6 +409,51 @@ static bool drm_connector_commit(struct wlr_output *output) {
 	}
 
 	wlr_output_update_enabled(output, true);
+	return true;
+}
+
+static bool drm_connector_set_custom_mode(struct wlr_output *output,
+	int32_t width, int32_t height, int32_t refresh);
+
+static bool drm_connector_commit(struct wlr_output *output) {
+	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
+
+	if (!drm->session->active) {
+		return false;
+	}
+
+	if (output->pending.committed & WLR_OUTPUT_STATE_MODE) {
+		switch (output->pending.mode_type) {
+		case WLR_OUTPUT_STATE_MODE_FIXED:
+			if (!drm_connector_set_mode(output, output->pending.mode)) {
+				return false;
+			}
+			break;
+		case WLR_OUTPUT_STATE_MODE_CUSTOM:
+			if (!drm_connector_set_custom_mode(output,
+					output->pending.custom_mode.width,
+					output->pending.custom_mode.height,
+					output->pending.custom_mode.refresh)) {
+				return false;
+			}
+			break;
+		}
+	}
+
+	if (output->pending.committed & WLR_OUTPUT_STATE_ENABLED) {
+		if (!enable_drm_connector(output, output->pending.enabled)) {
+			return false;
+		}
+	}
+
+	// TODO: support modesetting with a buffer
+	if (output->pending.committed & WLR_OUTPUT_STATE_BUFFER &&
+			!(output->pending.committed & WLR_OUTPUT_STATE_MODE)) {
+		if (!drm_connector_commit_buffer(output)) {
+			return false;
+		}
+	}
+
 	return true;
 }
 
@@ -1007,9 +1049,6 @@ static void drm_connector_destroy(struct wlr_output *output) {
 }
 
 static const struct wlr_output_impl output_impl = {
-	.enable = enable_drm_connector,
-	.set_mode = drm_connector_set_mode,
-	.set_custom_mode = drm_connector_set_custom_mode,
 	.set_cursor = drm_connector_set_cursor,
 	.move_cursor = drm_connector_move_cursor,
 	.destroy = drm_connector_destroy,
@@ -1353,6 +1392,12 @@ void scan_drm_connectors(struct wlr_drm_backend *drm) {
 			parse_edid(&wlr_conn->output, edid_len, edid);
 			free(edid);
 
+			struct wlr_output *output = &wlr_conn->output;
+			char description[128];
+			snprintf(description, sizeof(description), "%s %s %s (%s)",
+				output->make, output->model, output->serial, output->name);
+			wlr_output_set_description(output, description);
+
 			wlr_log(WLR_INFO, "Detected modes:");
 
 			for (int i = 0; i < drm_conn->count_modes; ++i) {
@@ -1399,6 +1444,8 @@ void scan_drm_connectors(struct wlr_drm_backend *drm) {
 					wlr_conn->output.name);
 			}
 
+			// TODO: this results in connectors being enabled without a mode
+			// set
 			wlr_output_update_enabled(&wlr_conn->output, wlr_conn->crtc != NULL);
 			wlr_conn->desired_enabled = true;
 
