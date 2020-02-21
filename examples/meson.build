@@ -60,6 +60,14 @@ clients = {
 			'xdg-shell',
 		],
 	},
+	'keyboard-shortcuts-inhibit': {
+		'src': 'keyboard-shortcuts-inhibit.c',
+		'dep': [wayland_cursor, wlroots],
+		'proto': [
+			'keyboard-shortcuts-inhibit-unstable-v1',
+			'xdg-shell',
+		],
+	},
 	'layer-shell': {
 		'src': 'layer-shell.c',
 		'dep': [wayland_cursor, wlroots],
@@ -80,6 +88,11 @@ clients = {
 		'src': 'gamma-control.c',
 		'dep': [wayland_cursor, math],
 		'proto': ['wlr-gamma-control-unstable-v1'],
+	},
+	'output-power-management': {
+		'src': 'output-power-management.c',
+		'dep': [wayland_client, wlroots],
+		'proto': ['wlr-output-power-management-unstable-v1'],
 	},
 	'pointer-constraints': {
 		'src': 'pointer-constraints.c',
