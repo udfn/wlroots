@@ -412,6 +412,43 @@ static bool drm_connector_commit_buffer(struct wlr_output *output) {
 	return true;
 }
 
+static void drm_connector_enable_adaptive_sync(struct wlr_output *output,
+		bool enabled) {
+	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
+	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
+
+	struct wlr_drm_crtc *crtc = conn->crtc;
+	if (!crtc) {
+		return;
+	}
+
+	uint64_t vrr_capable;
+	if (conn->props.vrr_capable == 0 ||
+			!get_drm_prop(drm->fd, conn->id, conn->props.vrr_capable,
+			&vrr_capable) || !vrr_capable) {
+		wlr_log(WLR_DEBUG, "Failed to enable adaptive sync: "
+			"connector '%s' doesn't support VRR", output->name);
+		return;
+	}
+
+	if (crtc->props.vrr_enabled == 0) {
+		wlr_log(WLR_DEBUG, "Failed to enable adaptive sync: "
+			"CRTC %"PRIu32" doesn't support VRR", crtc->id);
+		return;
+	}
+
+	if (drmModeObjectSetProperty(drm->fd, crtc->id, DRM_MODE_OBJECT_CRTC,
+			crtc->props.vrr_enabled, enabled) != 0) {
+		wlr_log_errno(WLR_ERROR, "drmModeObjectSetProperty(VRR_ENABLED) failed");
+		return;
+	}
+
+	output->adaptive_sync_status = enabled ? WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED :
+		WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
+	wlr_log(WLR_DEBUG, "VRR %s on connector '%s'",
+		enabled ? "enabled" : "disabled", output->name);
+}
+
 static bool drm_connector_set_custom_mode(struct wlr_output *output,
 	int32_t width, int32_t height, int32_t refresh);
 
@@ -444,6 +481,11 @@ static bool drm_connector_commit(struct wlr_output *output) {
 		if (!enable_drm_connector(output, output->pending.enabled)) {
 			return false;
 		}
+	}
+
+	if (output->pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
+		drm_connector_enable_adaptive_sync(output,
+			output->pending.adaptive_sync_enabled);
 	}
 
 	// TODO: support modesetting with a buffer
@@ -960,52 +1002,6 @@ static bool drm_connector_move_cursor(struct wlr_output *output,
 	return ok;
 }
 
-static bool drm_connector_schedule_frame(struct wlr_output *output) {
-	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
-	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
-	if (!drm->session->active) {
-		return false;
-	}
-
-	// Don't schedule a frame if the display is off.
-	if (!conn->desired_enabled) {
-		return false;
-	}
-
-	// We need to figure out where we are in the vblank cycle
-	// TODO: try using drmWaitVBlank and fallback to pageflipping
-
-	struct wlr_drm_crtc *crtc = conn->crtc;
-	if (!crtc) {
-		return false;
-	}
-	struct wlr_drm_plane *plane = crtc->primary;
-	struct gbm_bo *bo = plane->surf.back;
-	if (!bo) {
-		// We haven't swapped buffers yet -- can't do a pageflip
-		wlr_output_send_frame(output);
-		return true;
-	}
-	if (drm->parent) {
-		bo = copy_drm_surface_mgpu(&plane->mgpu_surf, bo);
-	}
-
-	if (conn->pageflip_pending) {
-		wlr_log(WLR_ERROR, "Skipping pageflip on output '%s'",
-			conn->output.name);
-		return true;
-	}
-
-	uint32_t fb_id = get_fb_for_bo(bo, plane->drm_format, drm->addfb2_modifiers);
-	if (!drm->iface->crtc_pageflip(drm, conn, crtc, fb_id, NULL)) {
-		return false;
-	}
-
-	conn->pageflip_pending = true;
-	wlr_output_update_enabled(output, true);
-	return true;
-}
-
 static uint32_t strip_alpha_channel(uint32_t format) {
 	switch (format) {
 	case DRM_FORMAT_ARGB8888:
@@ -1075,7 +1071,6 @@ static const struct wlr_output_impl output_impl = {
 	.set_gamma = set_drm_connector_gamma,
 	.get_gamma_size = drm_connector_get_gamma_size,
 	.export_dmabuf = drm_connector_export_dmabuf,
-	.schedule_frame = drm_connector_schedule_frame,
 	.attach_buffer = drm_connector_attach_buffer,
 };
 

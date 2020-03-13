@@ -240,6 +240,18 @@ void wlr_output_set_scale(struct wlr_output *output, float scale) {
 	output->pending.scale = scale;
 }
 
+void wlr_output_enable_adaptive_sync(struct wlr_output *output, bool enabled) {
+	bool currently_enabled =
+		output->adaptive_sync_status != WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
+	if (currently_enabled == enabled) {
+		output->pending.committed &= ~WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
+		return;
+	}
+
+	output->pending.committed |= WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
+	output->pending.adaptive_sync_enabled = enabled;
+}
+
 void wlr_output_set_subpixel(struct wlr_output *output,
 		enum wl_output_subpixel subpixel) {
 	if (output->subpixel == subpixel) {
@@ -316,6 +328,7 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	wl_list_init(&output->cursors);
 	wl_list_init(&output->resources);
 	wl_signal_init(&output->events.frame);
+	wl_signal_init(&output->events.damage);
 	wl_signal_init(&output->events.needs_frame);
 	wl_signal_init(&output->events.precommit);
 	wl_signal_init(&output->events.commit);
@@ -326,7 +339,6 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	wl_signal_init(&output->events.transform);
 	wl_signal_init(&output->events.description);
 	wl_signal_init(&output->events.destroy);
-	pixman_region32_init(&output->damage);
 	pixman_region32_init(&output->pending.damage);
 
 	const char *no_hardware_cursors = getenv("WLR_NO_HARDWARE_CURSORS");
@@ -371,7 +383,6 @@ void wlr_output_destroy(struct wlr_output *output) {
 	free(output->description);
 
 	pixman_region32_fini(&output->pending.damage);
-	pixman_region32_fini(&output->damage);
 
 	if (output->impl && output->impl->destroy) {
 		output->impl->destroy(output);
@@ -488,6 +499,10 @@ bool wlr_output_commit(struct wlr_output *output) {
 		wlr_log(WLR_ERROR, "Tried to modeset a disabled output");
 		goto error;
 	}
+	if (!enabled && output->pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
+		wlr_log(WLR_ERROR, "Tried to enable adaptive sync on a disabled output");
+		goto error;
+	}
 
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -547,7 +562,6 @@ bool wlr_output_commit(struct wlr_output *output) {
 	if (output->pending.committed & WLR_OUTPUT_STATE_BUFFER) {
 		output->frame_pending = true;
 		output->needs_frame = false;
-		pixman_region32_clear(&output->damage);
 	}
 
 	output_state_clear(&output->pending);
@@ -600,17 +614,19 @@ void wlr_output_send_frame(struct wlr_output *output) {
 static void schedule_frame_handle_idle_timer(void *data) {
 	struct wlr_output *output = data;
 	output->idle_frame = NULL;
-	if (!output->frame_pending && output->present_mode == WLR_OUTPUT_PRESENT_MODE_NORMAL
-		&& output->impl->schedule_frame) {
-		// Ask the backend to send a frame event when appropriate
-		if (output->impl->schedule_frame(output)) {
-			output->frame_pending = true;
-		}
+	if (!output->frame_pending) {
+		wlr_output_send_frame(output);
 	}
 }
 
 void wlr_output_schedule_frame(struct wlr_output *output) {
-	if (output->frame_pending || output->idle_frame != NULL || output->present_mode != WLR_OUTPUT_PRESENT_MODE_NORMAL) {
+	// Make sure the compositor commits a new frame. This is necessary to make
+	// clients which ask for frame callbacks without submitting a new buffer
+	// work.
+	wlr_output_update_needs_frame(output);
+
+	if (output->frame_pending || output->idle_frame != NULL
+		|| output->present_mode != WLR_OUTPUT_PRESENT_MODE_NORMAL) {
 		return;
 	}
 
@@ -670,7 +686,7 @@ bool wlr_output_export_dmabuf(struct wlr_output *output,
 }
 
 void wlr_output_update_needs_frame(struct wlr_output *output) {
-	if (output->present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
+	if (output->needs_frame) {
 		return;
 	}
 	output->needs_frame = true;
@@ -681,9 +697,16 @@ void wlr_output_damage_whole(struct wlr_output *output) {
 	int width, height;
 	wlr_output_transformed_resolution(output, &width, &height);
 
-	pixman_region32_union_rect(&output->damage, &output->damage, 0, 0,
-		width, height);
-	wlr_output_update_needs_frame(output);
+	pixman_region32_t damage;
+	pixman_region32_init_rect(&damage, 0, 0, width, height);
+
+	struct wlr_output_event_damage event = {
+		.output = output,
+		.damage = &damage,
+	};
+	wlr_signal_emit_safe(&output->events.damage, &event);
+
+	pixman_region32_fini(&damage);
 }
 
 struct wlr_output *wlr_output_from_resource(struct wl_resource *resource) {
@@ -839,9 +862,17 @@ static void output_cursor_get_box(struct wlr_output_cursor *cursor,
 static void output_cursor_damage_whole(struct wlr_output_cursor *cursor) {
 	struct wlr_box box;
 	output_cursor_get_box(cursor, &box);
-	pixman_region32_union_rect(&cursor->output->damage, &cursor->output->damage,
-		box.x, box.y, box.width, box.height);
-	wlr_output_update_needs_frame(cursor->output);
+
+	pixman_region32_t damage;
+	pixman_region32_init_rect(&damage, box.x, box.y, box.width, box.height);
+
+	struct wlr_output_event_damage event = {
+		.output = cursor->output,
+		.damage = &damage,
+	};
+	wlr_signal_emit_safe(&cursor->output->events.damage, &event);
+
+	pixman_region32_fini(&damage);
 }
 
 static void output_cursor_reset(struct wlr_output_cursor *cursor) {
