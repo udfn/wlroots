@@ -4,31 +4,56 @@
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/util/log.h>
+#include "util/signal.h"
 
 void wlr_buffer_init(struct wlr_buffer *buffer,
-		const struct wlr_buffer_impl *impl) {
+		const struct wlr_buffer_impl *impl, int width, int height) {
 	assert(impl->destroy);
 	buffer->impl = impl;
-	buffer->n_refs = 1;
+	buffer->width = width;
+	buffer->height = height;
+	wl_signal_init(&buffer->events.destroy);
+	wl_signal_init(&buffer->events.release);
 }
 
-struct wlr_buffer *wlr_buffer_ref(struct wlr_buffer *buffer) {
-	buffer->n_refs++;
-	return buffer;
+static void buffer_consider_destroy(struct wlr_buffer *buffer) {
+	if (!buffer->dropped || buffer->n_locks > 0) {
+		return;
+	}
+
+	wlr_signal_emit_safe(&buffer->events.destroy, NULL);
+
+	buffer->impl->destroy(buffer);
 }
 
-void wlr_buffer_unref(struct wlr_buffer *buffer) {
+void wlr_buffer_drop(struct wlr_buffer *buffer) {
 	if (buffer == NULL) {
 		return;
 	}
 
-	assert(buffer->n_refs > 0);
-	buffer->n_refs--;
-	if (buffer->n_refs > 0) {
+	assert(!buffer->dropped);
+	buffer->dropped = true;
+	buffer_consider_destroy(buffer);
+}
+
+struct wlr_buffer *wlr_buffer_lock(struct wlr_buffer *buffer) {
+	buffer->n_locks++;
+	return buffer;
+}
+
+void wlr_buffer_unlock(struct wlr_buffer *buffer) {
+	if (buffer == NULL) {
 		return;
 	}
 
-	buffer->impl->destroy(buffer);
+	assert(buffer->n_locks > 0);
+	buffer->n_locks--;
+
+	if (buffer->n_locks == 0) {
+		wl_signal_emit(&buffer->events.release, NULL);
+	}
+
+	buffer_consider_destroy(buffer);
 }
 
 bool wlr_buffer_get_dmabuf(struct wlr_buffer *buffer,
@@ -130,7 +155,17 @@ static void client_buffer_resource_handle_destroy(struct wl_listener *listener,
 	// which case we'll read garbage. We decide to accept this risk.
 }
 
-struct wlr_client_buffer *wlr_client_buffer_create(
+static void client_buffer_handle_release(struct wl_listener *listener,
+		void *data) {
+	struct wlr_client_buffer *buffer =
+		wl_container_of(listener, buffer, release);
+	if (!buffer->resource_released && buffer->resource != NULL) {
+		wl_buffer_send_release(buffer->resource);
+		buffer->resource_released = true;
+	}
+}
+
+struct wlr_client_buffer *wlr_client_buffer_import(
 		struct wlr_renderer *renderer, struct wl_resource *resource) {
 	assert(wlr_resource_is_buffer(resource));
 
@@ -179,6 +214,9 @@ struct wlr_client_buffer *wlr_client_buffer_create(
 		return NULL;
 	}
 
+	int width, height;
+	wlr_resource_get_buffer_size(resource, renderer, &width, &height);
+
 	struct wlr_client_buffer *buffer =
 		calloc(1, sizeof(struct wlr_client_buffer));
 	if (buffer == NULL) {
@@ -186,13 +224,20 @@ struct wlr_client_buffer *wlr_client_buffer_create(
 		wl_resource_post_no_memory(resource);
 		return NULL;
 	}
-	wlr_buffer_init(&buffer->base, &client_buffer_impl);
+	wlr_buffer_init(&buffer->base, &client_buffer_impl, width, height);
 	buffer->resource = resource;
 	buffer->texture = texture;
 	buffer->resource_released = resource_released;
 
 	wl_resource_add_destroy_listener(resource, &buffer->resource_destroy);
 	buffer->resource_destroy.notify = client_buffer_resource_handle_destroy;
+
+	buffer->release.notify = client_buffer_handle_release;
+	wl_signal_add(&buffer->base.events.release, &buffer->release);
+
+	// Ensure the buffer will be released before being destroyed
+	wlr_buffer_lock(&buffer->base);
+	wlr_buffer_drop(&buffer->base);
 
 	return buffer;
 }
@@ -202,7 +247,7 @@ struct wlr_client_buffer *wlr_client_buffer_apply_damage(
 		pixman_region32_t *damage) {
 	assert(wlr_resource_is_buffer(resource));
 
-	if (buffer->base.n_refs > 1) {
+	if (buffer->base.n_locks > 1) {
 		// Someone else still has a reference to the buffer
 		return NULL;
 	}
