@@ -474,15 +474,30 @@ static void output_state_clear(struct wlr_output_state *state) {
 	state->committed = 0;
 }
 
-bool wlr_output_commit(struct wlr_output *output) {
+static bool output_basic_test(struct wlr_output *output) {
 	if (output->pending.committed & WLR_OUTPUT_STATE_BUFFER) {
 		if (output->frame_pending) {
-			wlr_log(WLR_ERROR, "Tried to commit a buffer while a frame is pending");
-			goto error;
+			wlr_log(WLR_DEBUG, "Tried to commit a buffer while a frame is pending");
+			return false;
 		}
-		if (output->idle_frame != NULL) {
-			wl_event_source_remove(output->idle_frame);
-			output->idle_frame = NULL;
+
+		if (output->pending.buffer_type == WLR_OUTPUT_STATE_BUFFER_SCANOUT) {
+			if (output->attach_render_locks > 0) {
+				return false;
+			}
+
+			// If the output has at least one software cursor, refuse to attach the
+			// buffer
+			struct wlr_output_cursor *cursor;
+			wl_list_for_each(cursor, &output->cursors, link) {
+				if (cursor->enabled && cursor->visible &&
+						cursor != output->hardware_cursor) {
+					return false;
+				}
+			}
+
+			// TOOD: check width/height matches the output's, since scaling
+			// isn't supported
 		}
 	}
 
@@ -492,16 +507,38 @@ bool wlr_output_commit(struct wlr_output *output) {
 	}
 
 	if (!enabled && output->pending.committed & WLR_OUTPUT_STATE_BUFFER) {
-		wlr_log(WLR_ERROR, "Tried to commit a buffer on a disabled output");
-		goto error;
+		wlr_log(WLR_DEBUG, "Tried to commit a buffer on a disabled output");
+		return false;
 	}
 	if (!enabled && output->pending.committed & WLR_OUTPUT_STATE_MODE) {
-		wlr_log(WLR_ERROR, "Tried to modeset a disabled output");
-		goto error;
+		wlr_log(WLR_DEBUG, "Tried to modeset a disabled output");
+		return false;
 	}
 	if (!enabled && output->pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
-		wlr_log(WLR_ERROR, "Tried to enable adaptive sync on a disabled output");
-		goto error;
+		wlr_log(WLR_DEBUG, "Tried to enable adaptive sync on a disabled output");
+		return false;
+	}
+
+	return true;
+}
+
+bool wlr_output_test(struct wlr_output *output) {
+	if (!output_basic_test(output)) {
+		return false;
+	}
+	return output->impl->test(output);
+}
+
+bool wlr_output_commit(struct wlr_output *output) {
+	if (!output_basic_test(output)) {
+		wlr_log(WLR_ERROR, "Basic output test failed");
+		return false;
+	}
+
+	if ((output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
+			output->idle_frame != NULL) {
+		wl_event_source_remove(output->idle_frame);
+		output->idle_frame = NULL;
 	}
 
 	struct timespec now;
@@ -566,44 +603,22 @@ bool wlr_output_commit(struct wlr_output *output) {
 
 	output_state_clear(&output->pending);
 	return true;
-
-error:
-	output_state_clear(&output->pending);
-	return false;
 }
 
 void wlr_output_rollback(struct wlr_output *output) {
 	output_state_clear(&output->pending);
+
+	if (output->impl->rollback) {
+		output->impl->rollback(output);
+	}
 }
 
-bool wlr_output_attach_buffer(struct wlr_output *output,
+void wlr_output_attach_buffer(struct wlr_output *output,
 		struct wlr_buffer *buffer) {
-	if (!output->impl->attach_buffer) {
-		return false;
-	}
-	if (output->attach_render_locks > 0) {
-		return false;
-	}
-
-	// If the output has at least one software cursor, refuse to attach the
-	// buffer
-	struct wlr_output_cursor *cursor;
-	wl_list_for_each(cursor, &output->cursors, link) {
-		if (cursor->enabled && cursor->visible &&
-				cursor != output->hardware_cursor) {
-			return false;
-		}
-	}
-
-	if (!output->impl->attach_buffer(output, buffer)) {
-		return false;
-	}
-
 	output_state_clear_buffer(&output->pending);
 	output->pending.committed |= WLR_OUTPUT_STATE_BUFFER;
 	output->pending.buffer_type = WLR_OUTPUT_STATE_BUFFER_SCANOUT;
 	output->pending.buffer = wlr_buffer_lock(buffer);
-	return true;
 }
 
 void wlr_output_send_frame(struct wlr_output *output) {

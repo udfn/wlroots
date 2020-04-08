@@ -322,8 +322,11 @@ bool wlr_output_attach_render(struct wlr_output *output, int *buffer_age);
 /**
  * Attach a buffer to the output. Compositors should call `wlr_output_commit`
  * to submit the new frame. The output needs to be enabled.
+ *
+ * Not all backends support direct scan-out on all buffers. Compositors can
+ * check whether a buffer is supported by calling `wlr_output_test`.
  */
-bool wlr_output_attach_buffer(struct wlr_output *output,
+void wlr_output_attach_buffer(struct wlr_output *output,
 	struct wlr_buffer *buffer);
 /**
  * Get the preferred format for reading pixels.
@@ -346,6 +349,14 @@ bool wlr_output_preferred_read_format(struct wlr_output *output,
 void wlr_output_set_damage(struct wlr_output *output,
 	pixman_region32_t *damage);
 
+/**
+ * Test whether the pending output state would be accepted by the backend. If
+ * this function returns true, `wlr_output_commit` can only fail due to a
+ * runtime error.
+ *
+ * This function doesn't mutate the pending state.
+ */
+bool wlr_output_test(struct wlr_output *output);
 /**
  * Commit the pending output state. If `wlr_output_attach_render` has been
  * called, the pending frame will be submitted for display and a `frame` event
