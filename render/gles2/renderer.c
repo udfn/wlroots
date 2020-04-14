@@ -10,6 +10,7 @@
 #include <wlr/render/interface.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_matrix.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/util/log.h>
 #include "render/gles2.h"
 
@@ -355,10 +356,24 @@ static bool gles2_init_wl_display(struct wlr_renderer *wlr_renderer,
 		struct wl_display *wl_display) {
 	struct wlr_gles2_renderer *renderer =
 		gles2_get_renderer(wlr_renderer);
-	if (!wlr_egl_bind_display(renderer->egl, wl_display)) {
-		wlr_log(WLR_INFO, "failed to bind wl_display to EGL");
-		return false;
+
+	if (renderer->egl->exts.bind_wayland_display_wl) {
+		if (!wlr_egl_bind_display(renderer->egl, wl_display)) {
+			wlr_log(WLR_ERROR, "Failed to bind wl_display to EGL");
+			return false;
+		}
+	} else {
+		wlr_log(WLR_INFO, "EGL_WL_bind_wayland_display is not supported");
 	}
+
+	if (renderer->egl->exts.image_dmabuf_import_ext) {
+		if (wlr_linux_dmabuf_v1_create(wl_display, wlr_renderer) == NULL) {
+			return false;
+		}
+	} else {
+		wlr_log(WLR_INFO, "EGL_EXT_image_dma_buf_import is not supported");
+	}
+
 	return true;
 }
 

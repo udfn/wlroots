@@ -365,9 +365,6 @@ static bool test_buffer(struct wlr_drm_connector *conn,
 	if (attribs.flags != 0) {
 		return false;
 	}
-	if (attribs.width != output->width || attribs.height != output->height) {
-		return false;
-	}
 
 	if (!wlr_drm_format_set_has(&crtc->primary->formats,
 			attribs.format, attribs.modifier)) {
@@ -906,7 +903,7 @@ struct wlr_output_mode *wlr_drm_connector_add_mode(struct wlr_output *output,
 }
 
 static bool drm_connector_set_cursor(struct wlr_output *output,
-		struct wlr_texture *texture, int32_t scale,
+		struct wlr_texture *texture, float scale,
 		enum wl_output_transform transform,
 		int32_t hotspot_x, int32_t hotspot_y, bool update_texture) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
