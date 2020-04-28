@@ -85,6 +85,12 @@ static struct wlr_box *output_layout_output_get_box(
 	return &l_output->state->_box;
 }
 
+static void wlr_output_set_position(struct wlr_output *output, int x, int y) {
+	// Mangling wlr_output like this :/
+	output->x = x;
+	output->y = y;
+}
+
 /**
  * This must be called whenever the layout changes to reconfigure the auto
  * configured outputs and emit the `changed` event.
@@ -119,12 +125,15 @@ static void output_layout_reconfigure(struct wlr_output_layout *layout) {
 
 	wl_list_for_each(l_output, &layout->outputs, link) {
 		if (!l_output->state->auto_configured) {
+			wlr_output_set_position(l_output->output,l_output->x,l_output->y);
 			continue;
 		}
 		struct wlr_box *box = output_layout_output_get_box(l_output);
 		l_output->x = max_x;
 		l_output->y = max_x_y;
 		max_x += box->width;
+		wlr_output_set_position(l_output->output,l_output->x,l_output->y);
+
 	}
 
 	wlr_signal_emit_safe(&layout->events.change, layout);

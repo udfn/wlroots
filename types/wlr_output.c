@@ -22,7 +22,7 @@
 
 static void send_geometry(struct wl_resource *resource) {
 	struct wlr_output *output = wlr_output_from_resource(resource);
-	wl_output_send_geometry(resource, 0, 0,
+	wl_output_send_geometry(resource, output->x, output->y,
 		output->phys_width, output->phys_height, output->subpixel,
 		output->make, output->model, output->transform);
 }
@@ -88,7 +88,6 @@ static void output_bind(struct wl_client *wl_client, void *data,
 	}
 
 	wl_list_insert(&output->resources, wl_resource_get_link(resource));
-
 	send_geometry(resource);
 	send_current_mode(resource);
 	send_scale(resource);
@@ -353,6 +352,8 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 
 	output->frame_pending = true;
 	output->present_mode = WLR_OUTPUT_PRESENT_MODE_NORMAL;
+	output->x = 0;
+	output->y = 0;
 }
 
 void wlr_output_destroy(struct wlr_output *output) {

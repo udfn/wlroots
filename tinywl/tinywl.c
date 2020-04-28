@@ -50,6 +50,7 @@ struct tinywl_server {
 	struct wlr_seat *seat;
 	struct wl_listener new_input;
 	struct wl_listener request_cursor;
+	struct wl_listener request_set_selection;
 	struct wl_list keyboards;
 	enum tinywl_cursor_mode cursor_mode;
 	struct tinywl_view *grabbed_view;
@@ -298,6 +299,17 @@ static void seat_request_cursor(struct wl_listener *listener, void *data) {
 	}
 }
 
+static void seat_request_set_selection(struct wl_listener *listener, void *data) {
+	/* This event is raised by the seat when a client wants to set the selection,
+	 * usually when the user copies something. wlroots allows compositors to
+	 * ignore such requests if they so choose, but in tinywl we always honor
+	 */
+	struct tinywl_server *server = wl_container_of(
+			listener, server, request_set_selection);
+	struct wlr_seat_request_set_selection_event *event = data;
+	wlr_seat_set_selection(server->seat, event->source, event->serial);
+}
+
 static bool view_at(struct tinywl_view *view,
 		double lx, double ly, struct wlr_surface **surface,
 		double *sx, double *sy) {
@@ -310,8 +322,6 @@ static bool view_at(struct tinywl_view *view,
 	 */
 	double view_sx = lx - view->x;
 	double view_sy = ly - view->y;
-
-	struct wlr_surface_state *state = &view->xdg_surface->surface->current;
 
 	double _sx, _sy;
 	struct wlr_surface *_surface = NULL;
@@ -476,7 +486,6 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 	wlr_seat_pointer_notify_button(server->seat,
 			event->time_msec, event->button, event->state);
 	double sx, sy;
-	struct wlr_seat *seat = server->seat;
 	struct wlr_surface *surface;
 	struct tinywl_view *view = desktop_view_at(server,
 			server->cursor->x, server->cursor->y, &surface, &sx, &sy);
@@ -830,7 +839,9 @@ int main(int argc, char *argv[]) {
 	/* This creates some hands-off wlroots interfaces. The compositor is
 	 * necessary for clients to allocate surfaces and the data device manager
 	 * handles the clipboard. Each of these wlroots interfaces has room for you
-	 * to dig your fingers in and play with their behavior if you want. */
+	 * to dig your fingers in and play with their behavior if you want. Note that
+	 * the clients cannot set the selection directly without compositor approval,
+	 * see the handling of the request_set_selection event below.*/
 	wlr_compositor_create(server.wl_display, server.renderer);
 	wlr_data_device_manager_create(server.wl_display);
 
@@ -907,6 +918,9 @@ int main(int argc, char *argv[]) {
 	server.request_cursor.notify = seat_request_cursor;
 	wl_signal_add(&server.seat->events.request_set_cursor,
 			&server.request_cursor);
+	server.request_set_selection.notify = seat_request_set_selection;
+	wl_signal_add(&server.seat->events.request_set_selection,
+			&server.request_set_selection);
 
 	/* Add a Unix socket to the Wayland display. */
 	const char *socket = wl_display_add_socket_auto(server.wl_display);
