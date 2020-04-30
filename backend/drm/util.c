@@ -191,8 +191,6 @@ uint32_t get_fb_for_bo(struct gbm_bo *bo, bool with_modifiers) {
 	uint32_t width = gbm_bo_get_width(bo);
 	uint32_t height = gbm_bo_get_height(bo);
 	uint32_t format = gbm_bo_get_format(bo);
-	if (format == DRM_FORMAT_ARGB8888)
-		format = DRM_FORMAT_XRGB8888; // Hack, i915 cries about not supporting AR24...
 	uint32_t handles[4] = {0};
 	uint32_t strides[4] = {0};
 	uint32_t offsets[4] = {0};
