@@ -262,10 +262,10 @@ static void xwm_send_focus_window(struct wlr_xwm *xwm,
 			xsurface->window_id, XCB_CURRENT_TIME);
 	}
 
-	uint32_t values[1];
-	values[0] = XCB_STACK_MODE_ABOVE;
-	xcb_configure_window(xwm->xcb_conn, xsurface->window_id,
-		XCB_CONFIG_WINDOW_STACK_MODE, values);
+	//uint32_t values[1];
+	//values[0] = XCB_STACK_MODE_ABOVE;
+	//xcb_configure_window(xwm->xcb_conn, xsurface->window_id,
+	//	XCB_CONFIG_WINDOW_STACK_MODE, values);
 }
 
 static void xwm_surface_activate(struct wlr_xwm *xwm,
@@ -1792,6 +1792,14 @@ struct wlr_xwm *xwm_create(struct wlr_xwayland *wlr_xwayland) {
 	xcb_flush(xwm->xcb_conn);
 
 	return xwm;
+}
+
+void wlr_xwayland_surface_set_stack_mode(struct wlr_xwayland_surface *surface,
+		xcb_stack_mode_t stack_mode) {
+	uint32_t values[1];
+	values[0] = stack_mode;
+	xcb_configure_window(surface->xwm->xcb_conn, surface->window_id,
+			XCB_CONFIG_WINDOW_STACK_MODE, values);
 }
 
 void wlr_xwayland_surface_set_maximized(struct wlr_xwayland_surface *surface,
