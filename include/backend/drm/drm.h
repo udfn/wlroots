@@ -42,13 +42,21 @@ struct wlr_drm_plane {
 	union wlr_drm_plane_props props;
 };
 
+enum wlr_drm_crtc_field {
+	WLR_DRM_CRTC_MODE = 1 << 0,
+	WLR_DRM_CRTC_GAMMA_LUT = 1 << 1,
+};
+
 struct wlr_drm_crtc {
 	uint32_t id;
+	uint32_t pending; // bitfield of enum wlr_drm_crtc_field
+
+	bool active;
+	drmModeModeInfo mode;
 
 	// Atomic modesetting only
 	uint32_t mode_id;
 	uint32_t gamma_lut;
-	drmModeAtomicReq *atomic;
 
 	// Legacy only
 	drmModeCrtc *legacy_crtc;
@@ -64,8 +72,6 @@ struct wlr_drm_crtc {
 	uint32_t *overlays;
 
 	union wlr_drm_crtc_props props;
-
-	struct wl_list connectors;
 
 	uint16_t *gamma_table;
 	size_t gamma_table_size;
@@ -125,7 +131,6 @@ struct wlr_drm_connector {
 
 	union wlr_drm_connector_props props;
 
-	uint32_t width, height;
 	int32_t cursor_x, cursor_y;
 
 	drmModeCrtc *old_crtc;

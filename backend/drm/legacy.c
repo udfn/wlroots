@@ -6,27 +6,30 @@
 #include "backend/drm/iface.h"
 #include "backend/drm/util.h"
 
+<<<<<<< HEAD
 bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
 		struct wlr_drm_connector *conn, drmModeModeInfo *mode) {
+=======
+static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
+		struct wlr_drm_connector *conn, uint32_t flags) {
+>>>>>>> f72686c0b65b9525c9003d43eb626d8c7f4cbae8
 	struct wlr_drm_crtc *crtc = conn->crtc;
-	struct wlr_drm_fb *fb = plane_get_next_fb(crtc->primary);
-	struct gbm_bo *bo = drm_fb_acquire(fb, drm, &crtc->primary->mgpu_surf);
-	if (!bo) {
-		return false;
-	}
+	struct wlr_drm_plane *cursor = crtc->cursor;
 
-	uint32_t fb_id = get_fb_for_bo(bo, drm->addfb2_modifiers);
-	if (!fb_id) {
-		return false;
-	}
+	uint32_t fb_id = 0;
+	if (crtc->active) {
+		struct wlr_drm_fb *fb = plane_get_next_fb(crtc->primary);
+		struct gbm_bo *bo = drm_fb_acquire(fb, drm, &crtc->primary->mgpu_surf);
+		if (!bo) {
+			return false;
+		}
 
-	if (mode) {
-		if (drmModeSetCrtc(drm->fd, crtc->id, fb_id, 0, 0,
-				&conn->id, 1, mode)) {
-			wlr_log_errno(WLR_ERROR, "%s: Failed to set CRTC", conn->output.name);
+		fb_id = get_fb_for_bo(bo, drm->addfb2_modifiers);
+		if (!fb_id) {
 			return false;
 		}
 	}
+<<<<<<< HEAD
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
 	if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE)
 		flags |= DRM_MODE_PAGE_FLIP_ASYNC;
@@ -34,70 +37,101 @@ bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
 		wlr_log_errno(WLR_ERROR, "%s: Failed to page flip", conn->output.name);
 		return false;
 	}
+=======
 
-	return true;
-}
+	if (crtc->pending & WLR_DRM_CRTC_MODE) {
+		uint32_t *conns = NULL;
+		size_t conns_len = 0;
+		drmModeModeInfo *mode = NULL;
+		if (crtc->active) {
+			conns = &conn->id;
+			conns_len = 1;
+			mode = &crtc->mode;
+		}
+>>>>>>> f72686c0b65b9525c9003d43eb626d8c7f4cbae8
 
-static bool legacy_conn_enable(struct wlr_drm_backend *drm,
-		struct wlr_drm_connector *conn, bool enable) {
-	int ret = drmModeConnectorSetProperty(drm->fd, conn->id, conn->props.dpms,
-		enable ? DRM_MODE_DPMS_ON : DRM_MODE_DPMS_OFF);
-
-	if (!enable) {
-		drmModeSetCrtc(drm->fd, conn->crtc->id, 0, 0, 0, NULL, 0,
-					   NULL);
-	}
-
-	return ret >= 0;
-}
-
-bool legacy_crtc_set_cursor(struct wlr_drm_backend *drm,
-		struct wlr_drm_crtc *crtc, struct gbm_bo *bo) {
-	if (!crtc || !crtc->cursor) {
-		return true;
-	}
-
-	if (!bo) {
-		if (drmModeSetCursor(drm->fd, crtc->id, 0, 0, 0)) {
-			wlr_log_errno(WLR_DEBUG, "Failed to clear hardware cursor");
+		if (drmModeConnectorSetProperty(drm->fd, conn->id, conn->props.dpms,
+				crtc->active ? DRM_MODE_DPMS_ON : DRM_MODE_DPMS_OFF) != 0) {
+			wlr_log_errno(WLR_ERROR, "%s: failed to set DPMS property",
+				conn->output.name);
 			return false;
 		}
-		return true;
+
+		if (drmModeSetCrtc(drm->fd, crtc->id, fb_id, 0, 0,
+				conns, conns_len, mode)) {
+			wlr_log_errno(WLR_ERROR, "%s: failed to set CRTC",
+				conn->output.name);
+			return false;
+		}
 	}
 
-	struct wlr_drm_plane *plane = crtc->cursor;
-
-	if (drmModeSetCursor(drm->fd, crtc->id, gbm_bo_get_handle(bo).u32,
-			plane->surf.width, plane->surf.height)) {
-		wlr_log_errno(WLR_DEBUG, "Failed to set hardware cursor");
-		return false;
+	if (crtc->pending & WLR_DRM_CRTC_GAMMA_LUT) {
+		if (!drm_legacy_crtc_set_gamma(drm, crtc)) {
+			return false;
+		}
 	}
 
-	drm_fb_move(&crtc->cursor->queued_fb, &crtc->cursor->pending_fb);
+	if (cursor != NULL && cursor->cursor_enabled) {
+		struct wlr_drm_fb *cursor_fb = plane_get_next_fb(cursor);
+		struct gbm_bo *cursor_bo =
+			drm_fb_acquire(cursor_fb, drm, &cursor->mgpu_surf);
+		if (!cursor_bo) {
+			wlr_log_errno(WLR_DEBUG, "%s: failed to acquire cursor FB",
+				conn->output.name);
+			return false;
+		}
+
+		if (drmModeSetCursor(drm->fd, crtc->id,
+				gbm_bo_get_handle(cursor_bo).u32,
+				cursor->surf.width, cursor->surf.height)) {
+			wlr_log_errno(WLR_DEBUG, "%s: failed to set hardware cursor",
+				conn->output.name);
+			return false;
+		}
+
+		if (drmModeMoveCursor(drm->fd,
+			crtc->id, conn->cursor_x, conn->cursor_y) != 0) {
+			wlr_log_errno(WLR_ERROR, "%s: failed to move cursor",
+				conn->output.name);
+			return false;
+		}
+	} else {
+		if (drmModeSetCursor(drm->fd, crtc->id, 0, 0, 0)) {
+			wlr_log_errno(WLR_DEBUG, "%s: failed to unset hardware cursor",
+				conn->output.name);
+			return false;
+		}
+	}
+
+	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
+		if (drmModePageFlip(drm->fd, crtc->id, fb_id,
+				DRM_MODE_PAGE_FLIP_EVENT, drm)) {
+			wlr_log_errno(WLR_ERROR, "%s: Failed to page flip", conn->output.name);
+			return false;
+		}
+	}
+
 	return true;
 }
 
-bool legacy_crtc_move_cursor(struct wlr_drm_backend *drm,
-		struct wlr_drm_crtc *crtc, int x, int y) {
-	return !drmModeMoveCursor(drm->fd, crtc->id, x, y);
-}
-
-static bool legacy_crtc_set_gamma(struct wlr_drm_backend *drm,
-		struct wlr_drm_crtc *crtc, size_t size,
-		uint16_t *r, uint16_t *g, uint16_t *b) {
-	return !drmModeCrtcSetGamma(drm->fd, crtc->id, (uint32_t)size, r, g, b);
-}
-
-static size_t legacy_crtc_get_gamma_size(struct wlr_drm_backend *drm,
+bool drm_legacy_crtc_set_gamma(struct wlr_drm_backend *drm,
 		struct wlr_drm_crtc *crtc) {
-	return (size_t)crtc->legacy_crtc->gamma_size;
+	uint32_t size = crtc->gamma_table_size;
+	uint16_t *r = NULL, *g = NULL, *b = NULL;
+	if (size > 0) {
+		r = crtc->gamma_table;
+		g = crtc->gamma_table + crtc->gamma_table_size;
+		b = crtc->gamma_table + 2 * crtc->gamma_table_size;
+	}
+
+	if (drmModeCrtcSetGamma(drm->fd, crtc->id, size, r, g, b) != 0) {
+		wlr_log_errno(WLR_ERROR, "Failed to set gamma LUT on CRTC %"PRIu32,
+			crtc->id);
+		return false;
+	}
+	return true;
 }
 
 const struct wlr_drm_interface legacy_iface = {
-	.conn_enable = legacy_conn_enable,
-	.crtc_pageflip = legacy_crtc_pageflip,
-	.crtc_set_cursor = legacy_crtc_set_cursor,
-	.crtc_move_cursor = legacy_crtc_move_cursor,
-	.crtc_set_gamma = legacy_crtc_set_gamma,
-	.crtc_get_gamma_size = legacy_crtc_get_gamma_size,
+	.crtc_commit = legacy_crtc_commit,
 };
