@@ -1041,6 +1041,9 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 		}
 		drm_legacy_crtc_move_cursor(drm,conn->crtc,conn->cursor_x,conn->cursor_y);
 	}
+	else if (!drm_legacy_crtc_set_cursor(drm,crtc,NULL)) {
+			return false;
+	}
 	wlr_output_update_needs_frame(output);
 	return true;
 }
