@@ -23,5 +23,12 @@ extern const struct wlr_drm_interface legacy_iface;
 
 bool drm_legacy_crtc_set_gamma(struct wlr_drm_backend *drm,
 	struct wlr_drm_crtc *crtc);
+bool drm_legacy_crtc_move_cursor(struct wlr_drm_backend *drm,
+	struct wlr_drm_crtc *crtc, int x, int y);
+bool drm_legacy_crtc_set_cursor(struct wlr_drm_backend *drm,
+	struct wlr_drm_crtc *crtc, struct gbm_bo *bo);
+bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
+		struct wlr_drm_connector *conn, uint32_t flags);
+
 
 #endif

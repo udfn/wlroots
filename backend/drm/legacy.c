@@ -6,15 +6,9 @@
 #include "backend/drm/iface.h"
 #include "backend/drm/util.h"
 
-<<<<<<< HEAD
-bool legacy_crtc_pageflip(struct wlr_drm_backend *drm,
-		struct wlr_drm_connector *conn, drmModeModeInfo *mode) {
-=======
-static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
+bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
 		struct wlr_drm_connector *conn, uint32_t flags) {
->>>>>>> f72686c0b65b9525c9003d43eb626d8c7f4cbae8
 	struct wlr_drm_crtc *crtc = conn->crtc;
-	struct wlr_drm_plane *cursor = crtc->cursor;
 
 	uint32_t fb_id = 0;
 	if (crtc->active) {
@@ -29,15 +23,8 @@ static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
 			return false;
 		}
 	}
-<<<<<<< HEAD
-	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
 	if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE)
 		flags |= DRM_MODE_PAGE_FLIP_ASYNC;
-	if (drmModePageFlip(drm->fd, crtc->id, fb_id, flags, drm)) {
-		wlr_log_errno(WLR_ERROR, "%s: Failed to page flip", conn->output.name);
-		return false;
-	}
-=======
 
 	if (crtc->pending & WLR_DRM_CRTC_MODE) {
 		uint32_t *conns = NULL;
@@ -48,7 +35,6 @@ static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
 			conns_len = 1;
 			mode = &crtc->mode;
 		}
->>>>>>> f72686c0b65b9525c9003d43eb626d8c7f4cbae8
 
 		if (drmModeConnectorSetProperty(drm->fd, conn->id, conn->props.dpms,
 				crtc->active ? DRM_MODE_DPMS_ON : DRM_MODE_DPMS_OFF) != 0) {
@@ -71,46 +57,32 @@ static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
 		}
 	}
 
-	if (cursor != NULL && cursor->cursor_enabled) {
-		struct wlr_drm_fb *cursor_fb = plane_get_next_fb(cursor);
-		struct gbm_bo *cursor_bo =
-			drm_fb_acquire(cursor_fb, drm, &cursor->mgpu_surf);
-		if (!cursor_bo) {
-			wlr_log_errno(WLR_DEBUG, "%s: failed to acquire cursor FB",
-				conn->output.name);
-			return false;
-		}
-
-		if (drmModeSetCursor(drm->fd, crtc->id,
-				gbm_bo_get_handle(cursor_bo).u32,
-				cursor->surf.width, cursor->surf.height)) {
-			wlr_log_errno(WLR_DEBUG, "%s: failed to set hardware cursor",
-				conn->output.name);
-			return false;
-		}
-
-		if (drmModeMoveCursor(drm->fd,
-			crtc->id, conn->cursor_x, conn->cursor_y) != 0) {
-			wlr_log_errno(WLR_ERROR, "%s: failed to move cursor",
-				conn->output.name);
-			return false;
-		}
-	} else {
-		if (drmModeSetCursor(drm->fd, crtc->id, 0, 0, 0)) {
-			wlr_log_errno(WLR_DEBUG, "%s: failed to unset hardware cursor",
-				conn->output.name);
-			return false;
-		}
-	}
-
 	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		if (drmModePageFlip(drm->fd, crtc->id, fb_id,
-				DRM_MODE_PAGE_FLIP_EVENT, drm)) {
+				flags, drm)) {
 			wlr_log_errno(WLR_ERROR, "%s: Failed to page flip", conn->output.name);
 			return false;
 		}
 	}
 
+	return true;
+}
+
+bool drm_legacy_crtc_move_cursor(struct wlr_drm_backend *drm,
+	struct wlr_drm_crtc *crtc, int x, int y) {
+	return !drmModeMoveCursor(drm->fd,crtc->id,x,y);
+}
+
+bool drm_legacy_crtc_set_cursor(struct wlr_drm_backend *drm,
+	struct wlr_drm_crtc *crtc, struct gbm_bo *bo) {
+	if (!bo) {
+		return !drmModeSetCursor(drm->fd,crtc->id,0,0,0);
+	}
+	struct wlr_drm_plane *plane = crtc->cursor;
+	if (drmModeSetCursor(drm->fd,crtc->id,gbm_bo_get_handle(bo).u32,plane->surf.width,plane->surf.height)) {
+		return false;
+	}
+	drm_fb_move(&crtc->cursor->queued_fb,&crtc->cursor->pending_fb);
 	return true;
 }
 
@@ -133,5 +105,5 @@ bool drm_legacy_crtc_set_gamma(struct wlr_drm_backend *drm,
 }
 
 const struct wlr_drm_interface legacy_iface = {
-	.crtc_commit = legacy_crtc_commit,
+	.crtc_commit = drm_legacy_crtc_commit,
 };

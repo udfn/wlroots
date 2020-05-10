@@ -111,7 +111,7 @@ static void plane_disable(struct atomic *atom, struct wlr_drm_plane *plane) {
 	atomic_add(atom, id, props->fb_id, 0);
 	atomic_add(atom, id, props->crtc_id, 0);
 }
-*/
+
 static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 		struct wlr_drm_plane *plane, uint32_t crtc_id, int32_t x, int32_t y) {
 	uint32_t id = plane->id;
@@ -159,7 +159,7 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 		}
 	} else if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
 		// AMS doesn't support async pageflips (yet?), so legacy it is.
-		return legacy_crtc_pageflip(drm,conn,mode);
+		return drm_legacy_crtc_commit(drm,conn,flags);
 	}
 
 	if (crtc->pending & WLR_DRM_CRTC_GAMMA_LUT) {
@@ -203,6 +203,7 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 	if (crtc->active) {
 		atomic_add(&atom, crtc->id, crtc->props.gamma_lut, crtc->gamma_lut);
 		set_plane_props(&atom, drm, crtc->primary, crtc->id, 0, 0);
+		/*
 		if (crtc->cursor) {
 			if (crtc->cursor->cursor_enabled) {
 				set_plane_props(&atom, drm, crtc->cursor, crtc->id,
@@ -211,13 +212,13 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 				plane_disable(&atom, crtc->cursor);
 			}
 		}
+		*/
 	} else {
 		plane_disable(&atom, crtc->primary);
 		if (crtc->cursor) {
 			plane_disable(&atom, crtc->cursor);
 		}
 	}
-
 	bool ok = atomic_commit(&atom, conn, flags);
 	atomic_finish(&atom);
 	return ok;

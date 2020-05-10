@@ -1035,8 +1035,12 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 		 * The render operations can be waited for using:
 		 */
 		glFinish();
+		struct gbm_bo *bo = drm_fb_acquire(&plane->pending_fb,drm,&plane->mgpu_surf);
+		if (!drm_legacy_crtc_set_cursor(drm,crtc,bo)) {
+			return false;
+		}
+		drm_legacy_crtc_move_cursor(drm,conn->crtc,conn->cursor_x,conn->cursor_y);
 	}
-
 	wlr_output_update_needs_frame(output);
 	return true;
 }
@@ -1044,6 +1048,7 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 static bool drm_connector_move_cursor(struct wlr_output *output,
 		int x, int y) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
+	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
 	if (!conn->crtc) {
 		return false;
 	}
@@ -1066,7 +1071,10 @@ static bool drm_connector_move_cursor(struct wlr_output *output,
 	conn->cursor_x = box.x;
 	conn->cursor_y = box.y;
 
-	wlr_output_update_needs_frame(output);
+	bool ok = drm_legacy_crtc_move_cursor(drm,conn->crtc,box.x,box.y);
+	if (ok) {
+		wlr_output_update_needs_frame(output);
+	}
 	return true;
 }
 
