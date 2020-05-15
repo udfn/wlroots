@@ -792,18 +792,6 @@ static void implicit_tool_up(struct wlr_tablet_tool_v2_grab *grab) {
 	check_and_release_implicit_grab(grab);
 }
 
-/* Only send the motion event, when we are over the surface for now */
-static void implicit_tool_motion(
-	struct wlr_tablet_tool_v2_grab *grab, double x, double y) {
-	struct implicit_grab_state *state = grab->data;
-	if (state->focused != state->original) {
-		return;
-	}
-
-	wlr_send_tablet_v2_tablet_tool_motion(grab->tool, x, y);
-}
-
-
 static void implicit_tool_button(
 	struct wlr_tablet_tool_v2_grab *grab, uint32_t button,
 	enum zwp_tablet_pad_v2_button_state state) {
@@ -822,7 +810,7 @@ static const struct wlr_tablet_tool_v2_grab_interface
 	.proximity_in = implicit_tool_proximity_in,
 	.down = implicit_tool_down,
 	.up = implicit_tool_up,
-	.motion = implicit_tool_motion,
+	.motion = default_tool_motion,
 	.pressure = default_tool_pressure,
 	.distance = default_tool_distance,
 	.tilt = default_tool_tilt,
@@ -834,13 +822,14 @@ static const struct wlr_tablet_tool_v2_grab_interface
 	.cancel = implicit_tool_cancel,
 };
 
-static bool tool_has_implicit_grab(struct wlr_tablet_v2_tablet_tool *tool) {
+bool wlr_tablet_tool_v2_has_implicit_grab(
+		struct wlr_tablet_v2_tablet_tool *tool) {
 	return tool->grab->interface == &implicit_tool_grab_interface;
 }
 
 void wlr_tablet_tool_v2_start_implicit_grab(
 		struct wlr_tablet_v2_tablet_tool *tool) {
-	if (tool_has_implicit_grab(tool) || !tool->focused_surface) {
+	if (wlr_tablet_tool_v2_has_implicit_grab(tool) || !tool->focused_surface) {
 		return;
 	}
 
