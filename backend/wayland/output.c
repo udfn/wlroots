@@ -300,15 +300,13 @@ static bool output_commit(struct wlr_output *wlr_output) {
 		}
 	}
 
-	wlr_egl_make_current(&output->backend->egl, EGL_NO_SURFACE, NULL);
-
 	return true;
 }
 
 static void output_rollback(struct wlr_output *wlr_output) {
 	struct wlr_wl_output *output =
 		get_wl_output_from_output(wlr_output);
-	wlr_egl_make_current(&output->backend->egl, EGL_NO_SURFACE, NULL);
+	wlr_egl_unset_current(&output->backend->egl);
 }
 
 static bool output_set_cursor(struct wlr_output *wlr_output,

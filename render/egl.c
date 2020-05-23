@@ -387,6 +387,15 @@ bool wlr_egl_make_current(struct wlr_egl *egl, EGLSurface surface,
 	return true;
 }
 
+bool wlr_egl_unset_current(struct wlr_egl *egl) {
+	if (!eglMakeCurrent(egl->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+			EGL_NO_CONTEXT)) {
+		wlr_log(WLR_ERROR, "eglMakeCurrent failed");
+		return false;
+	}
+	return true;
+}
+
 bool wlr_egl_is_current(struct wlr_egl *egl) {
 	return eglGetCurrentContext() == egl->context;
 }
@@ -440,6 +449,8 @@ bool wlr_egl_swap_buffers(struct wlr_egl *egl, EGLSurface surface,
 		wlr_log(WLR_ERROR, "eglSwapBuffers failed");
 		return false;
 	}
+
+	wlr_egl_unset_current(egl);
 	return true;
 }
 
@@ -690,7 +701,7 @@ bool wlr_egl_destroy_surface(struct wlr_egl *egl, EGLSurface surface) {
 		// Reset the current EGL surface in case it's the one we're destroying,
 		// otherwise the next wlr_egl_make_current call will result in a
 		// use-after-free.
-		wlr_egl_make_current(egl, NULL, NULL);
+		wlr_egl_make_current(egl, EGL_NO_SURFACE, NULL);
 	}
 	return eglDestroySurface(egl->display, surface);
 }

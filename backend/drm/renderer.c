@@ -361,15 +361,15 @@ void drm_fb_move(struct wlr_drm_fb *new, struct wlr_drm_fb *old) {
 }
 
 bool drm_surface_render_black_frame(struct wlr_drm_surface *surf) {
-	struct wlr_renderer *renderer = surf->renderer->wlr_rend;
-
 	if (!drm_surface_make_current(surf, NULL)) {
 		return false;
 	}
 
+	struct wlr_renderer *renderer = surf->renderer->wlr_rend;
 	wlr_renderer_begin(renderer, surf->width, surf->height);
 	wlr_renderer_clear(renderer, (float[]){ 0.0, 0.0, 0.0, 1.0 });
 	wlr_renderer_end(renderer);
+
 	return true;
 }
 
@@ -390,20 +390,19 @@ struct gbm_bo *drm_fb_acquire(struct wlr_drm_fb *fb, struct wlr_drm_backend *drm
 
 	/* Perform copy across GPUs */
 
-	struct wlr_renderer *renderer = mgpu->renderer->wlr_rend;
-
-	if (!drm_surface_make_current(mgpu, NULL)) {
+	struct wlr_texture *tex = get_tex_for_bo(mgpu->renderer, fb->bo);
+	if (!tex) {
 		return NULL;
 	}
 
-	struct wlr_texture *tex = get_tex_for_bo(mgpu->renderer, fb->bo);
-	if (!tex) {
+	if (!drm_surface_make_current(mgpu, NULL)) {
 		return NULL;
 	}
 
 	float mat[9];
 	wlr_matrix_projection(mat, 1, 1, WL_OUTPUT_TRANSFORM_NORMAL);
 
+	struct wlr_renderer *renderer = mgpu->renderer->wlr_rend;
 	wlr_renderer_begin(renderer, mgpu->width, mgpu->height);
 	wlr_renderer_clear(renderer, (float[]){ 0.0, 0.0, 0.0, 0.0 });
 	wlr_render_texture_with_matrix(renderer, tex, mat, 1.0f);
