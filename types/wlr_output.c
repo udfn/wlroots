@@ -1159,7 +1159,10 @@ bool wlr_output_cursor_move(struct wlr_output_cursor *cursor,
 		output_cursor_damage_whole(cursor);
 		return true;
 	}
-
+	if (!cursor->visible) {
+		wlr_output_cursor_set_surface(cursor, NULL, 0, 0);
+		return true;
+	}
 	assert(cursor->output->impl->move_cursor);
 	return cursor->output->impl->move_cursor(cursor->output, (int)x, (int)y);
 }
