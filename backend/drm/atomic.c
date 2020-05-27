@@ -56,12 +56,12 @@ static void atomic_add(struct atomic *atom, uint32_t id, uint32_t prop, uint64_t
 
 static bool create_mode_blob(struct wlr_drm_backend *drm,
 		struct wlr_drm_crtc *crtc, uint32_t *blob_id) {
-	if (!crtc->active) {
+	if (!crtc->pending.active) {
 		*blob_id = 0;
 		return true;
 	}
 
-	if (drmModeCreatePropertyBlob(drm->fd, &crtc->mode,
+	if (drmModeCreatePropertyBlob(drm->fd, &crtc->pending.mode->drm_mode,
 			sizeof(drmModeModeInfo), blob_id)) {
 		wlr_log_errno(WLR_ERROR, "Unable to create mode property blob");
 		return false;
@@ -101,6 +101,27 @@ static bool create_gamma_lut_blob(struct wlr_drm_backend *drm,
 	free(gamma);
 
 	return true;
+}
+
+static void commit_blob(struct wlr_drm_backend *drm,
+		uint32_t *current, uint32_t next) {
+	if (*current == next) {
+		return;
+	}
+	if (*current != 0) {
+		drmModeDestroyPropertyBlob(drm->fd, *current);
+	}
+	*current = next;
+}
+
+static void rollback_blob(struct wlr_drm_backend *drm,
+		uint32_t *current, uint32_t next) {
+	if (*current == next) {
+		return;
+	}
+	if (next != 0) {
+		drmModeDestroyPropertyBlob(drm->fd, next);
+	}
 }
 
 static void plane_disable(struct atomic *atom, struct wlr_drm_plane *plane) {
@@ -149,12 +170,9 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 	struct wlr_output *output = &conn->output;
 	struct wlr_drm_crtc *crtc = conn->crtc;
 
-	if (crtc->pending & WLR_DRM_CRTC_MODE) {
-		if (crtc->mode_id != 0) {
-			drmModeDestroyPropertyBlob(drm->fd, crtc->mode_id);
-		}
-
-		if (!create_mode_blob(drm, crtc, &crtc->mode_id)) {
+	uint32_t mode_id = crtc->mode_id;
+	if (crtc->pending_modeset) {
+		if (!create_mode_blob(drm, crtc, &mode_id)) {
 			return false;
 		}
 	} else if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
@@ -162,6 +180,7 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 		return drm_legacy_crtc_commit(drm,conn,flags);
 	}
 
+	uint32_t gamma_lut = crtc->gamma_lut;
 	if (output->pending.committed & WLR_OUTPUT_STATE_GAMMA_LUT) {
 		// Fallback to legacy gamma interface when gamma properties are not
 		// available (can happen on older Intel GPUs that support gamma but not
@@ -173,20 +192,14 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 				return false;
 			}
 		} else {
-			if (crtc->gamma_lut != 0) {
-				drmModeDestroyPropertyBlob(drm->fd, crtc->gamma_lut);
-			}
-
-			wlr_log(WLR_ERROR, "setting gamma LUT %zu", output->pending.gamma_lut_size);
 			if (!create_gamma_lut_blob(drm, output->pending.gamma_lut_size,
-					output->pending.gamma_lut, &crtc->gamma_lut)) {
+					output->pending.gamma_lut, &gamma_lut)) {
 				return false;
 			}
 		}
 	}
 
-	bool modeset = crtc->pending & WLR_DRM_CRTC_MODE;
-	if (modeset) {
+	if (crtc->pending_modeset) {
 		flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
 	} else {
 		flags |= DRM_MODE_ATOMIC_NONBLOCK;
@@ -198,16 +211,17 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 	struct atomic atom;
 	atomic_begin(&atom);
 	atomic_add(&atom, conn->id, conn->props.crtc_id,
-		crtc->active ? crtc->id : 0);
-	if (modeset && crtc->active && conn->props.link_status != 0) {
+		crtc->pending.active ? crtc->id : 0);
+	if (crtc->pending_modeset && crtc->pending.active &&
+			conn->props.link_status != 0) {
 		atomic_add(&atom, conn->id, conn->props.link_status,
 			DRM_MODE_LINK_STATUS_GOOD);
 	}
-	atomic_add(&atom, crtc->id, crtc->props.mode_id, crtc->mode_id);
-	atomic_add(&atom, crtc->id, crtc->props.active, crtc->active);
-	if (crtc->active) {
+	atomic_add(&atom, crtc->id, crtc->props.mode_id, mode_id);
+	atomic_add(&atom, crtc->id, crtc->props.active, crtc->pending.active);
+	if (crtc->pending.active) {
 		if (crtc->props.gamma_lut != 0) {
-			atomic_add(&atom, crtc->id, crtc->props.gamma_lut, crtc->gamma_lut);
+			atomic_add(&atom, crtc->id, crtc->props.gamma_lut, gamma_lut);
 		}
 		set_plane_props(&atom, drm, crtc->primary, crtc->id, 0, 0);
 		/*
@@ -228,6 +242,15 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 	}
 	bool ok = atomic_commit(&atom, conn, flags);
 	atomic_finish(&atom);
+
+	if (ok && !(flags & DRM_MODE_ATOMIC_TEST_ONLY)) {
+		commit_blob(drm, &crtc->mode_id, mode_id);
+		commit_blob(drm, &crtc->gamma_lut, gamma_lut);
+	} else {
+		rollback_blob(drm, &crtc->mode_id, mode_id);
+		rollback_blob(drm, &crtc->gamma_lut, gamma_lut);
+	}
+
 	return ok;
 }
 

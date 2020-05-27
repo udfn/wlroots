@@ -42,16 +42,16 @@ struct wlr_drm_plane {
 	union wlr_drm_plane_props props;
 };
 
-enum wlr_drm_crtc_field {
-	WLR_DRM_CRTC_MODE = 1 << 0,
+struct wlr_drm_crtc_state {
+	bool active;
+	struct wlr_drm_mode *mode;
 };
 
 struct wlr_drm_crtc {
 	uint32_t id;
-	uint32_t pending; // bitfield of enum wlr_drm_crtc_field
 
-	bool active;
-	drmModeModeInfo mode;
+	bool pending_modeset;
+	struct wlr_drm_crtc_state pending, current;
 
 	// Atomic modesetting only
 	uint32_t mode_id;
@@ -131,7 +131,6 @@ struct wlr_drm_connector {
 
 	drmModeCrtc *old_crtc;
 
-	struct wl_event_source *retry_pageflip;
 	struct wl_list link;
 
 	/*
@@ -151,8 +150,7 @@ void finish_drm_resources(struct wlr_drm_backend *drm);
 void restore_drm_outputs(struct wlr_drm_backend *drm);
 void scan_drm_connectors(struct wlr_drm_backend *state);
 int handle_drm_event(int fd, uint32_t mask, void *data);
-bool enable_drm_connector(struct wlr_output *output, bool enable);
-bool drm_connector_set_mode(struct wlr_output *output,
+bool drm_connector_set_mode(struct wlr_drm_connector *conn,
 	struct wlr_output_mode *mode);
 size_t drm_crtc_get_gamma_lut_size(struct wlr_drm_backend *drm,
 	struct wlr_drm_crtc *crtc);
