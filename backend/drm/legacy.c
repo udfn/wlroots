@@ -62,6 +62,23 @@ bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
 			return false;
 		}
 	}
+	if ((output->pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) &&
+			drm_connector_supports_vrr(conn)) {
+		if (drmModeObjectSetProperty(drm->fd, crtc->id, DRM_MODE_OBJECT_CRTC,
+				crtc->props.vrr_enabled,
+				output->pending.adaptive_sync_enabled) != 0) {
+			wlr_log_errno(WLR_ERROR,
+				"drmModeObjectSetProperty(VRR_ENABLED) failed");
+			return false;
+		}
+		output->adaptive_sync_status = output->pending.adaptive_sync_enabled ?
+			WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED :
+			WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
+		wlr_log(WLR_DEBUG, "VRR %s on connector '%s'",
+			output->pending.adaptive_sync_enabled ? "enabled" : "disabled",
+			output->name);
+	}
+
 	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		if (drmModePageFlip(drm->fd, crtc->id, fb_id,
 				flags, drm)) {

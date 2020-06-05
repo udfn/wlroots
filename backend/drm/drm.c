@@ -336,10 +336,18 @@ static bool drm_crtc_commit(struct wlr_drm_connector *conn, uint32_t flags) {
 		get_drm_backend_from_backend(conn->output.backend);
 	struct wlr_drm_crtc *crtc = conn->crtc;
 	bool ok = drm->iface->crtc_commit(drm, conn, flags);
-	if (ok) {
+	if (ok && !(flags & DRM_MODE_ATOMIC_TEST_ONLY)) {
 		memcpy(&crtc->current, &crtc->pending, sizeof(struct wlr_drm_crtc_state));
+		drm_fb_move(&crtc->primary->queued_fb, &crtc->primary->pending_fb);
+		if (crtc->cursor != NULL) {
+			drm_fb_move(&crtc->cursor->queued_fb, &crtc->cursor->pending_fb);
+		}
 	} else {
 		memcpy(&crtc->pending, &crtc->current, sizeof(struct wlr_drm_crtc_state));
+		drm_fb_clear(&crtc->primary->pending_fb);
+		if (crtc->cursor != NULL) {
+			drm_fb_clear(&crtc->cursor->pending_fb);
+		}
 	}
 	crtc->pending_modeset = false;
 	return ok;
@@ -348,7 +356,11 @@ static bool drm_crtc_commit(struct wlr_drm_connector *conn, uint32_t flags) {
 static bool drm_crtc_page_flip(struct wlr_drm_connector *conn) {
 	struct wlr_drm_crtc *crtc = conn->crtc;
 
-	if (conn->pageflip_pending) {
+	// wlr_drm_interface.crtc_commit will perform either a non-blocking
+	// page-flip, either a blocking modeset. When performing a blocking modeset
+	// we'll wait for all queued page-flips to complete, so we don't need this
+	// safeguard.
+	if (conn->pageflip_pending && !crtc->pending_modeset) {
 		wlr_log(WLR_ERROR, "Failed to page-flip output '%s': "
 			"a page-flip is already pending", conn->output.name);
 		return false;
@@ -361,11 +373,6 @@ static bool drm_crtc_page_flip(struct wlr_drm_connector *conn) {
 	}
 
 	conn->pageflip_pending = true;
-	drm_fb_move(&crtc->primary->queued_fb, &crtc->primary->pending_fb);
-	if (crtc->cursor != NULL) {
-		drm_fb_move(&crtc->cursor->queued_fb, &crtc->cursor->pending_fb);
-	}
-	wlr_output_update_enabled(&conn->output, true);
 	return true;
 }
 
@@ -495,21 +502,19 @@ static bool drm_connector_commit_buffer(struct wlr_output *output) {
 	}
 
 	if (!drm_crtc_page_flip(conn)) {
-		drm_fb_clear(&plane->pending_fb);
 		return false;
 	}
 
 	return true;
 }
 
-static void drm_connector_enable_adaptive_sync(struct wlr_output *output,
-		bool enabled) {
-	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
-	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
+bool drm_connector_supports_vrr(struct wlr_drm_connector *conn) {
+	struct wlr_drm_backend *drm =
+		get_drm_backend_from_backend(conn->output.backend);
 
 	struct wlr_drm_crtc *crtc = conn->crtc;
 	if (!crtc) {
-		return;
+		return false;
 	}
 
 	uint64_t vrr_capable;
@@ -517,26 +522,17 @@ static void drm_connector_enable_adaptive_sync(struct wlr_output *output,
 			!get_drm_prop(drm->fd, conn->id, conn->props.vrr_capable,
 			&vrr_capable) || !vrr_capable) {
 		wlr_log(WLR_DEBUG, "Failed to enable adaptive sync: "
-			"connector '%s' doesn't support VRR", output->name);
-		return;
+			"connector '%s' doesn't support VRR", conn->output.name);
+		return false;
 	}
 
 	if (crtc->props.vrr_enabled == 0) {
 		wlr_log(WLR_DEBUG, "Failed to enable adaptive sync: "
 			"CRTC %"PRIu32" doesn't support VRR", crtc->id);
-		return;
+		return false;
 	}
 
-	if (drmModeObjectSetProperty(drm->fd, crtc->id, DRM_MODE_OBJECT_CRTC,
-			crtc->props.vrr_enabled, enabled) != 0) {
-		wlr_log_errno(WLR_ERROR, "drmModeObjectSetProperty(VRR_ENABLED) failed");
-		return;
-	}
-
-	output->adaptive_sync_status = enabled ? WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED :
-		WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
-	wlr_log(WLR_DEBUG, "VRR %s on connector '%s'",
-		enabled ? "enabled" : "disabled", output->name);
+	return true;
 }
 
 static bool drm_connector_commit(struct wlr_output *output) {
@@ -572,17 +568,17 @@ static bool drm_connector_commit(struct wlr_output *output) {
 		if (!drm_connector_set_mode(conn, wlr_mode)) {
 			return false;
 		}
-	}
-
-	if (output->pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
-		drm_connector_enable_adaptive_sync(output,
-			output->pending.adaptive_sync_enabled);
-	}
-
-	// TODO: support modesetting with a buffer
-	if (output->pending.committed & WLR_OUTPUT_STATE_BUFFER &&
-			!(output->pending.committed & WLR_OUTPUT_STATE_MODE)) {
+	} else if (output->pending.committed & WLR_OUTPUT_STATE_BUFFER) {
+		// TODO: support modesetting with a buffer
 		if (!drm_connector_commit_buffer(output)) {
+			return false;
+		}
+	} else if (output->pending.committed &
+			(WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED |
+			WLR_OUTPUT_STATE_GAMMA_LUT)) {
+		assert(conn->crtc != NULL);
+		// TODO: maybe request a page-flip event here?
+		if (!drm_crtc_commit(conn, 0)) {
 			return false;
 		}
 	}
