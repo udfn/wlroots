@@ -128,7 +128,7 @@ struct wlr_drm_connector {
 	union wlr_drm_connector_props props;
 
 	int32_t cursor_x, cursor_y;
-
+	bool cursor_visible;
 	drmModeCrtc *old_crtc;
 
 	struct wl_list link;

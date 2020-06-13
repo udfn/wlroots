@@ -974,7 +974,7 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 }
 
 static bool drm_connector_move_cursor(struct wlr_output *output,
-		int x, int y) {
+		int x, int y, bool visible) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
 	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
 	if (!conn->crtc) {
@@ -984,7 +984,6 @@ static bool drm_connector_move_cursor(struct wlr_output *output,
 	if (!plane) {
 		return false;
 	}
-
 	struct wlr_box box = { .x = x, .y = y };
 
 	int width, height;
@@ -1001,7 +1000,17 @@ static bool drm_connector_move_cursor(struct wlr_output *output,
 
 	conn->cursor_x = box.x;
 	conn->cursor_y = box.y;
-
+	if (visible != conn->cursor_visible) {
+		if (conn->cursor_visible) {
+			drmModeSetCursor(drm->fd, conn->crtc->id, 0,0,0);
+		}
+		else {
+			struct wlr_drm_fb *fb = plane_get_next_fb(plane);
+			struct gbm_bo *bo = drm_fb_acquire(fb, drm, &plane->mgpu_surf);
+			drm_legacy_crtc_set_cursor(drm, conn->crtc,bo);
+		}
+		conn->cursor_visible = visible;
+	}
 	bool ok = drm_legacy_crtc_move_cursor(drm,conn->crtc,box.x,box.y);
 	if (ok) {
 		wlr_output_update_needs_frame(output);
