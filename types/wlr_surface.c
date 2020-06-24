@@ -148,6 +148,11 @@ static void surface_set_input_region(struct wl_client *client,
  */
 static void surface_state_viewport_src_size(struct wlr_surface_state *state,
 		int *out_width, int *out_height) {
+	if (state->buffer_width == 0 && state->buffer_height == 0) {
+		*out_width = *out_height = 0;
+		return;
+	}
+
 	if (state->viewport.has_src) {
 		*out_width = state->viewport.src.width;
 		*out_height = state->viewport.src.height;
@@ -175,16 +180,16 @@ static void surface_state_finalize(struct wlr_surface *surface,
 		}
 	}
 
-	if (state->buffer_resource != NULL) {
-		if (state->viewport.has_dst) {
+	if (state->viewport.has_dst) {
+		if (state->buffer_width == 0 && state->buffer_height == 0) {
+			state->width = state->height = 0;
+		} else {
 			state->width = state->viewport.dst_width;
 			state->height = state->viewport.dst_height;
-		} else {
-			surface_state_viewport_src_size(state,
-				&state->width, &state->height);
 		}
 	} else {
-		state->width = state->height = 0;
+		surface_state_viewport_src_size(state,
+			&state->width, &state->height);
 	}
 
 	pixman_region32_intersect_rect(&state->surface_damage,

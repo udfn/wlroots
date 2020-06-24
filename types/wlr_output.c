@@ -313,7 +313,7 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 
 void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 		const struct wlr_output_impl *impl, struct wl_display *display) {
-	assert(impl->attach_render && impl->commit);
+	assert(impl->attach_render && impl->rollback_render && impl->commit);
 	if (impl->set_cursor || impl->move_cursor) {
 		assert(impl->set_cursor && impl->move_cursor);
 	}
@@ -450,15 +450,16 @@ bool wlr_output_attach_render(struct wlr_output *output, int *buffer_age) {
 
 bool wlr_output_preferred_read_format(struct wlr_output *output,
 		enum wl_shm_format *fmt) {
-	if (!output->impl->attach_render(output, NULL)) {
-		return false;
-	}
-
 	struct wlr_renderer *renderer = wlr_backend_get_renderer(output->backend);
 	if (!renderer->impl->preferred_read_format || !renderer->impl->read_pixels) {
 		return false;
 	}
+
+	if (!output->impl->attach_render(output, NULL)) {
+		return false;
+	}
 	*fmt = renderer->impl->preferred_read_format(renderer);
+	output->impl->rollback_render(output);
 	return true;
 }
 
@@ -640,11 +641,13 @@ bool wlr_output_commit(struct wlr_output *output) {
 }
 
 void wlr_output_rollback(struct wlr_output *output) {
-	output_state_clear(&output->pending);
-
-	if (output->impl->rollback) {
-		output->impl->rollback(output);
+	if (output->impl->rollback_render &&
+			(output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
+			output->pending.buffer_type == WLR_OUTPUT_STATE_BUFFER_RENDER) {
+		output->impl->rollback_render(output);
 	}
+
+	output_state_clear(&output->pending);
 }
 
 void wlr_output_attach_buffer(struct wlr_output *output,
