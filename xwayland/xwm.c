@@ -38,6 +38,7 @@ const char *atom_map[ATOM_LAST] = {
 	[NET_ACTIVE_WINDOW] = "_NET_ACTIVE_WINDOW",
 	[NET_WM_MOVERESIZE] = "_NET_WM_MOVERESIZE",
 	[NET_SUPPORTING_WM_CHECK] = "_NET_SUPPORTING_WM_CHECK",
+	[NET_WM_STATE_FOCUSED] = "_NET_WM_STATE_FOCUSED",
 	[NET_WM_STATE_MODAL] = "_NET_WM_STATE_MODAL",
 	[NET_WM_STATE_FULLSCREEN] = "_NET_WM_STATE_FULLSCREEN",
 	[NET_WM_STATE_MAXIMIZED_VERT] = "_NET_WM_STATE_MAXIMIZED_VERT",
@@ -238,8 +239,20 @@ static void xwm_set_net_client_list(struct wlr_xwm *xwm) {
 			XCB_ATOM_WINDOW, 32, mapped_surfaces, windows);
 }
 
-static void xwm_send_focus_window(struct wlr_xwm *xwm,
+static void xsurface_set_net_wm_state(struct wlr_xwayland_surface *xsurface);
+
+static void xwm_set_focus_window(struct wlr_xwm *xwm,
 		struct wlr_xwayland_surface *xsurface) {
+	struct wlr_xwayland_surface *unfocus_surface = xwm->focus_surface;
+
+	// We handle cases where focus_surface == xsurface because we
+	// want to be able to deny FocusIn events.
+	xwm->focus_surface = xsurface;
+
+	if (unfocus_surface) {
+		xsurface_set_net_wm_state(unfocus_surface);
+	}
+
 	if (!xsurface) {
 		xcb_set_input_focus_checked(xwm->xcb_conn,
 			XCB_INPUT_FOCUS_POINTER_ROOT,
@@ -265,11 +278,13 @@ static void xwm_send_focus_window(struct wlr_xwm *xwm,
 		xcb_set_input_focus(xwm->xcb_conn, XCB_INPUT_FOCUS_POINTER_ROOT,
 			xsurface->window_id, XCB_CURRENT_TIME);
 	}
-
-	//uint32_t values[1];
-	//values[0] = XCB_STACK_MODE_ABOVE;
-	//xcb_configure_window(xwm->xcb_conn, xsurface->window_id,
-	//	XCB_CONFIG_WINDOW_STACK_MODE, values);
+/*
+	uint32_t values[1];
+	values[0] = XCB_STACK_MODE_ABOVE;
+	xcb_configure_window(xwm->xcb_conn, xsurface->window_id,
+		XCB_CONFIG_WINDOW_STACK_MODE, values);
+*/
+	xsurface_set_net_wm_state(xsurface);
 }
 
 static void xwm_surface_activate(struct wlr_xwm *xwm,
@@ -285,9 +300,7 @@ static void xwm_surface_activate(struct wlr_xwm *xwm,
 		xwm_set_net_active_window(xwm, XCB_WINDOW_NONE);
 	}
 
-	xwm_send_focus_window(xwm, xsurface);
-
-	xwm->focus_surface = xsurface;
+	xwm_set_focus_window(xwm, xsurface);
 
 	xcb_flush(xwm->xcb_conn);
 }
@@ -295,7 +308,7 @@ static void xwm_surface_activate(struct wlr_xwm *xwm,
 static void xsurface_set_net_wm_state(struct wlr_xwayland_surface *xsurface) {
 	struct wlr_xwm *xwm = xsurface->xwm;
 
-	uint32_t property[5];
+	uint32_t property[6];
 	size_t i = 0;
 	if (xsurface->modal) {
 		property[i++] = xwm->atoms[NET_WM_STATE_MODAL];
@@ -311,6 +324,9 @@ static void xsurface_set_net_wm_state(struct wlr_xwayland_surface *xsurface) {
 	}
 	if (xsurface->minimized) {
 		property[i++] = xwm->atoms[NET_WM_STATE_HIDDEN];
+	}
+	if (xsurface == xwm->focus_surface) {
+		property[i++] = xwm->atoms[NET_WM_STATE_FOCUSED];
 	}
 	assert(i <= sizeof(property) / sizeof(property[0]));
 
@@ -393,8 +409,9 @@ static void read_surface_class(struct wlr_xwm *xwm,
 		surface->class = NULL;
 	}
 
-	wlr_log(WLR_DEBUG, "XCB_ATOM_WM_CLASS: %s %s", surface->instance,
-		surface->class);
+	wlr_log(WLR_DEBUG, "XCB_ATOM_WM_CLASS: %s %s",
+		surface->instance ? surface->instance : "(null)",
+		surface->class ? surface->class : "(null)");
 	wlr_signal_emit_safe(&surface->events.set_class, surface);
 }
 
@@ -416,7 +433,8 @@ static void read_surface_role(struct wlr_xwm *xwm,
 		xsurface->role = NULL;
 	}
 
-	wlr_log(WLR_DEBUG, "XCB_ATOM_WM_WINDOW_ROLE: %s", xsurface->role);
+	wlr_log(WLR_DEBUG, "XCB_ATOM_WM_WINDOW_ROLE: %s",
+		xsurface->role ? xsurface->role : "(null)");
 	wlr_signal_emit_safe(&xsurface->events.set_role, xsurface);
 }
 
@@ -444,7 +462,7 @@ static void read_surface_title(struct wlr_xwm *xwm,
 	}
 	xsurface->has_utf8_title = is_utf8;
 
-	wlr_log(WLR_DEBUG, "XCB_ATOM_WM_NAME: %s", xsurface->title);
+	wlr_log(WLR_DEBUG, "XCB_ATOM_WM_NAME: %s", xsurface->title ? xsurface->title : "(null)");
 	wlr_signal_emit_safe(&xsurface->events.set_title, xsurface);
 }
 
@@ -558,7 +576,7 @@ static void read_surface_hints(struct wlr_xwm *xwm,
 		xsurface->hints->input = true;
 	}
 
-	wlr_log(WLR_DEBUG, "WM_HINTS (%d)", reply->value_len);
+	wlr_log(WLR_DEBUG, "WM_HINTS (%" PRIu32 ")", reply->value_len);
 	wlr_signal_emit_safe(&xsurface->events.set_hints, xsurface);
 }
 #else
@@ -610,7 +628,7 @@ static void read_surface_normal_hints(struct wlr_xwm *xwm,
 		xsurface->size_hints->max_height = -1;
 	}
 
-	wlr_log(WLR_DEBUG, "WM_NORMAL_HINTS (%d)", reply->value_len);
+	wlr_log(WLR_DEBUG, "WM_NORMAL_HINTS (%" PRIu32 ")", reply->value_len);
 }
 #else
 static void read_surface_normal_hints(struct wlr_xwm *xwm,
@@ -654,7 +672,7 @@ static void read_surface_motif_hints(struct wlr_xwm *xwm,
 		wlr_signal_emit_safe(&xsurface->events.set_decorations, xsurface);
 	}
 
-	wlr_log(WLR_DEBUG, "MOTIF_WM_HINTS (%d)", reply->value_len);
+	wlr_log(WLR_DEBUG, "MOTIF_WM_HINTS (%" PRIu32 ")", reply->value_len);
 }
 
 static void read_surface_net_wm_state(struct wlr_xwm *xwm,
@@ -727,8 +745,8 @@ static void read_surface_property(struct wlr_xwm *xwm,
 		read_surface_role(xwm, xsurface, reply);
 	} else {
 		char *prop_name = xwm_get_atom_name(xwm, property);
-		wlr_log(WLR_DEBUG, "unhandled X11 property %u (%s) for window %u",
-			property, prop_name, xsurface->window_id);
+		wlr_log(WLR_DEBUG, "unhandled X11 property %" PRIu32 " (%s) for window %" PRIu32,
+			property, prop_name ? prop_name : "(null)", xsurface->window_id);
 		free(prop_name);
 	}
 
@@ -1210,8 +1228,8 @@ static void xwm_handle_wm_protocols_message(struct wlr_xwm *xwm,
 		surface->pinging = false;
 	} else {
 		char *type_name = xwm_get_atom_name(xwm, type);
-		wlr_log(WLR_DEBUG, "unhandled WM_PROTOCOLS client message %u (%s)",
-			type, type_name);
+		wlr_log(WLR_DEBUG, "unhandled WM_PROTOCOLS client message %" PRIu32 " (%s)",
+			type, type_name ? type_name : "(null)");
 		free(type_name);
 	}
 }
@@ -1269,8 +1287,8 @@ static void xwm_handle_client_message(struct wlr_xwm *xwm,
 		xwm_handle_wm_change_state_message(xwm, ev);
 	} else if (!xwm_handle_selection_client_message(xwm, ev)) {
 		char *type_name = xwm_get_atom_name(xwm, ev->type);
-		wlr_log(WLR_DEBUG, "unhandled x11 client message %u (%s)", ev->type,
-			type_name);
+		wlr_log(WLR_DEBUG, "unhandled x11 client message %" PRIu32 " (%s)", ev->type,
+			type_name ? type_name : "(null)");
 		free(type_name);
 	}
 }
@@ -1297,10 +1315,10 @@ static void xwm_handle_focus_in(struct wlr_xwm *xwm,
 	struct wlr_xwayland_surface *requested_focus = lookup_surface(xwm, ev->event);
 	if (xwm->focus_surface && requested_focus &&
 			requested_focus->pid == xwm->focus_surface->pid) {
-		xwm->focus_surface = requested_focus;
+		xwm_set_focus_window(xwm, requested_focus);
+	} else {
+		xwm_set_focus_window(xwm, xwm->focus_surface);
 	}
-
-	xwm_send_focus_window(xwm, xwm->focus_surface);
 }
 
 static void xwm_handle_xcb_error(struct wlr_xwm *xwm, xcb_value_error_t *ev) {
@@ -1596,7 +1614,7 @@ static void xwm_get_resources(struct wlr_xwm *xwm) {
 	xfixes_reply =
 		xcb_xfixes_query_version_reply(xwm->xcb_conn, xfixes_cookie, NULL);
 
-	wlr_log(WLR_DEBUG, "xfixes version: %d.%d",
+	wlr_log(WLR_DEBUG, "xfixes version: %" PRIu32 ".%" PRIu32,
 		xfixes_reply->major_version, xfixes_reply->minor_version);
 
 	free(xfixes_reply);
@@ -1815,6 +1833,7 @@ struct wlr_xwm *xwm_create(struct wlr_xwayland *xwayland, int wm_fd) {
 		xwm->atoms[NET_WM_STATE],
 		xwm->atoms[NET_ACTIVE_WINDOW],
 		xwm->atoms[NET_WM_MOVERESIZE],
+		xwm->atoms[NET_WM_STATE_FOCUSED],
 		xwm->atoms[NET_WM_STATE_MODAL],
 		xwm->atoms[NET_WM_STATE_FULLSCREEN],
 		xwm->atoms[NET_WM_STATE_MAXIMIZED_VERT],
