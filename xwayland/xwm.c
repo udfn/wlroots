@@ -1890,6 +1890,7 @@ void wlr_xwayland_surface_set_stack_mode(struct wlr_xwayland_surface *surface,
 	values[0] = stack_mode;
 	xcb_configure_window(surface->xwm->xcb_conn, surface->window_id,
 			XCB_CONFIG_WINDOW_STACK_MODE, values);
+	xcb_flush(surface->xwm->xcb_conn);
 }
 void wlr_xwayland_surface_set_minimized(struct wlr_xwayland_surface *surface,
 		bool minimized) {
