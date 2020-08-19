@@ -906,7 +906,7 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 		conn->cursor_y -= hotspot.y - plane->cursor_hotspot_y;
 		plane->cursor_hotspot_x = hotspot.x;
 		plane->cursor_hotspot_y = hotspot.y;
-
+		drm_legacy_crtc_move_cursor(drm,conn->crtc,conn->cursor_x,conn->cursor_y);
 		wlr_output_update_needs_frame(output);
 	}
 
@@ -966,7 +966,6 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 		if (!drm_legacy_crtc_set_cursor(drm,crtc,bo)) {
 			return false;
 		}
-		drm_legacy_crtc_move_cursor(drm,conn->crtc,conn->cursor_x,conn->cursor_y);
 	}
 	else if (!drm_legacy_crtc_set_cursor(drm,crtc,NULL)) {
 			return false;
