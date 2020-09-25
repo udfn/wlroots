@@ -175,7 +175,7 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 		if (!create_mode_blob(drm, crtc, &mode_id)) {
 			return false;
 		}
-	} else if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
+	} else if (conn->output.present_mode != WLR_OUTPUT_PRESENT_MODE_NORMAL) {
 		// AMS doesn't support async pageflips (yet?), so legacy it is.
 		return drm_legacy_crtc_commit(drm,conn,flags);
 	}

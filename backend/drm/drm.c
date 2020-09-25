@@ -1517,14 +1517,11 @@ static void page_flip_handler(int fd, unsigned seq,
 			&conn->crtc->cursor->queued_fb);
 	}
 
-	int refresh;
+	int refresh = mhz_to_nsec(conn->output.refresh);;
 	uint32_t present_flags = WLR_OUTPUT_PRESENT_HW_CLOCK |
 		WLR_OUTPUT_PRESENT_HW_COMPLETION;
-	if (conn->output.present_mode != WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
+	if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_NORMAL) {
 		present_flags |= WLR_OUTPUT_PRESENT_VSYNC;
-		refresh = mhz_to_nsec(conn->output.refresh);
-	} else {
-		refresh = 1000; // "now"
 	}
 	/* Don't report ZERO_COPY in multi-gpu situations, because we had to copy
 	 * data between the GPUs, even if we were using the direct scanout
@@ -1547,6 +1544,14 @@ static void page_flip_handler(int fd, unsigned seq,
 		.refresh = refresh,
 		.flags = present_flags,
 	};
+	if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_ADAPTIVE) {
+		conn->next_present.tv_sec = tv_sec;
+		conn->next_present.tv_nsec = present_time.tv_nsec + refresh;
+		if (conn->next_present.tv_nsec > 1000000000) {
+			conn->next_present.tv_nsec -= 1000000000;
+			conn->next_present.tv_sec++;
+		}
+	}
 	wlr_output_send_present(&conn->output, &present_event);
 
 	if (drm->session->active) {

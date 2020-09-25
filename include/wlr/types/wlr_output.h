@@ -103,9 +103,11 @@ struct wlr_output_state {
 
 enum wlr_output_present_mode {
 	// The standard present mode, waits for vblank before showing.
-	WLR_OUTPUT_PRESENT_MODE_NORMAL = 0x1,
+	WLR_OUTPUT_PRESENT_MODE_NORMAL = 0x0,
 	// Immediately present the pending frame without waiting for vblank.
-	WLR_OUTPUT_PRESENT_MODE_IMMEDIATE = 0x2,
+	WLR_OUTPUT_PRESENT_MODE_IMMEDIATE = 0x1,
+	// Waits for vblank unless framerate is less than display refresh rate.
+	WLR_OUTPUT_PRESENT_MODE_ADAPTIVE = 0x2
 };
 
 struct wlr_output_impl;

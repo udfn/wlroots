@@ -1,4 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
+#include <time.h>
 #include <gbm.h>
 #include <stdlib.h>
 #include <wlr/util/log.h>
@@ -26,8 +28,24 @@ bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
 			return false;
 		}
 	}
-	if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE)
-		flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+	switch (conn->output.present_mode) {
+		case WLR_OUTPUT_PRESENT_MODE_IMMEDIATE:
+			flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+			break;
+		case WLR_OUTPUT_PRESENT_MODE_ADAPTIVE: {
+			struct timespec cur;
+			clock_gettime(CLOCK_MONOTONIC, &cur);
+			// I'm sure this messy logic can be simplified..
+			if (cur.tv_sec == conn->next_present.tv_sec) {
+				if (cur.tv_nsec > conn->next_present.tv_nsec) {
+					// rats, we missed vblank, flip immediately!
+					flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+				}
+			} else if (cur.tv_sec > conn->next_present.tv_sec) {
+				flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+			}
+		}
+	}
 
 	if (crtc->pending_modeset) {
 		uint32_t *conns = NULL;
