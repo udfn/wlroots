@@ -55,16 +55,27 @@ static int xwm_selection_flush_source_data(
 static void xwm_selection_transfer_start_outgoing(
 		struct wlr_xwm_selection_transfer *transfer);
 
+static struct wlr_xwm_selection_transfer *xwm_selection_transfer_get_first(
+		struct wlr_xwm_selection *selection) {
+	struct wlr_xwm_selection_transfer *first = NULL;
+	if (!wl_list_empty(&selection->outgoing)) {
+		first = wl_container_of(selection->outgoing.prev, first,
+			outgoing_link);
+	}
+
+	return first;
+}
+
 static void xwm_selection_transfer_destroy_outgoing(
 		struct wlr_xwm_selection_transfer *transfer) {
+	struct wlr_xwm_selection *selection = transfer->selection;
+	bool was_first = transfer == xwm_selection_transfer_get_first(selection);
 	wl_list_remove(&transfer->outgoing_link);
 
-	// Start next queued transfer
-	struct wlr_xwm_selection_transfer *first = NULL;
-	if (!wl_list_empty(&transfer->selection->outgoing)) {
-		first = wl_container_of(transfer->selection->outgoing.prev, first,
-			outgoing_link);
-		xwm_selection_transfer_start_outgoing(first);
+	// Start next queued transfer if we just removed the active one.
+	if (was_first && !wl_list_empty(&selection->outgoing)) {
+		xwm_selection_transfer_start_outgoing(
+			xwm_selection_transfer_get_first(selection));
 	}
 
 	xwm_selection_transfer_remove_source(transfer);
@@ -92,7 +103,7 @@ static int xwm_data_source_read(int fd, uint32_t mask, void *data) {
 	size_t available = transfer->source_data.alloc - current;
 	ssize_t len = read(fd, p, available);
 	if (len == -1) {
-		wlr_log(WLR_ERROR, "read error from data source: %m");
+		wlr_log_errno(WLR_ERROR, "read error from data source");
 		goto error_out;
 	}
 
@@ -289,7 +300,7 @@ static void xwm_selection_send_data(struct wlr_xwm_selection *selection,
 
 	int p[2];
 	if (pipe(p) == -1) {
-		wlr_log(WLR_ERROR, "pipe() failed: %m");
+		wlr_log_errno(WLR_ERROR, "pipe() failed");
 		xwm_selection_send_notify(selection->xwm, req, false);
 		return;
 	}
