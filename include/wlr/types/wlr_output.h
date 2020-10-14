@@ -185,6 +185,7 @@ struct wlr_output {
 
 	struct wl_event_source *idle_frame;
 	struct wl_event_source *idle_done;
+	struct wl_event_source *present_timeout;
 
 	int attach_render_locks; // number of locks forcing rendering
 
