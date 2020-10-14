@@ -196,7 +196,6 @@ struct wlr_output {
 
 	void *data;
 	uint32_t present_mode; // enum wlr_output_present_mode
-	int x,y; // hack
 };
 
 struct wlr_output_event_damage {
