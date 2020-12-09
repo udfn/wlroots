@@ -61,15 +61,14 @@ bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
 			DRM_MODE_DPMS_ON : DRM_MODE_DPMS_OFF;
 		if (drmModeConnectorSetProperty(drm->fd, conn->id, conn->props.dpms,
 				dpms) != 0) {
-			wlr_log_errno(WLR_ERROR, "%s: failed to set DPMS property",
-				conn->output.name);
+			wlr_drm_conn_log_errno(conn, WLR_ERROR,
+				"Failed to set DPMS property");
 			return false;
 		}
 
 		if (drmModeSetCrtc(drm->fd, crtc->id, fb_id, 0, 0,
 				conns, conns_len, mode)) {
-			wlr_log_errno(WLR_ERROR, "%s: failed to set CRTC",
-				conn->output.name);
+			wlr_drm_conn_log_errno(conn, WLR_ERROR, "Failed to set CRTC");
 			return false;
 		}
 	}
@@ -85,22 +84,21 @@ bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
 		if (drmModeObjectSetProperty(drm->fd, crtc->id, DRM_MODE_OBJECT_CRTC,
 				crtc->props.vrr_enabled,
 				output->pending.adaptive_sync_enabled) != 0) {
-			wlr_log_errno(WLR_ERROR,
+			wlr_drm_conn_log_errno(conn, WLR_ERROR,
 				"drmModeObjectSetProperty(VRR_ENABLED) failed");
 			return false;
 		}
 		output->adaptive_sync_status = output->pending.adaptive_sync_enabled ?
 			WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED :
 			WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
-		wlr_log(WLR_DEBUG, "VRR %s on connector '%s'",
-			output->pending.adaptive_sync_enabled ? "enabled" : "disabled",
-			output->name);
+		wlr_drm_conn_log(conn, WLR_DEBUG, "VRR %s",
+			output->pending.adaptive_sync_enabled ? "enabled" : "disabled");
 	}
 
 	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		if (drmModePageFlip(drm->fd, crtc->id, fb_id,
-				flags, drm)) {
-			wlr_log_errno(WLR_ERROR, "%s: Failed to page flip", conn->output.name);
+				DRM_MODE_PAGE_FLIP_EVENT, drm)) {
+			wlr_drm_conn_log_errno(conn, WLR_ERROR, "drmModePageFlip failed");
 			return false;
 		}
 	}
