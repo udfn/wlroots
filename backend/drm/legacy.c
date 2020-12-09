@@ -118,12 +118,13 @@ bool drm_legacy_crtc_set_cursor(struct wlr_drm_backend *drm,
 	if (!bo) {
 		return !drmModeSetCursor(drm->fd,crtc->id,0,0,0);
 	}
-	struct wlr_drm_plane *plane = crtc->cursor;
-	if (drmModeSetCursor(drm->fd,crtc->id,gbm_bo_get_handle(bo).u32,plane->surf.width,plane->surf.height)) {
+	struct wlr_drm_plane *cursor = crtc->cursor;
+	struct wlr_drm_fb *cursor_fb = plane_get_next_fb(cursor);
+	struct gbm_bo *cursor_bo = drm_fb_acquire(cursor_fb, drm, &cursor->mgpu_surf);
+	if (!cursor_bo) {
 		return false;
 	}
-	drm_fb_move(&crtc->cursor->queued_fb,&crtc->cursor->pending_fb);
-	return true;
+	return !drmModeSetCursor(drm->fd,crtc->id,gbm_bo_get_handle(bo).u32,cursor->surf.width,cursor->surf.height);
 }
 
 static void fill_empty_gamma_table(size_t size,
