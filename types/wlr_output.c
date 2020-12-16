@@ -393,6 +393,7 @@ void wlr_output_destroy(struct wlr_output *output) {
 	if (!output) {
 		return;
 	}
+	wl_event_source_remove(output->present_timeout);
 
 	wl_list_remove(&output->display_destroy.link);
 	wlr_output_destroy_global(output);
