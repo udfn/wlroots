@@ -978,7 +978,6 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 	else if (!drm_legacy_crtc_set_cursor(drm,crtc,NULL)) {
 			return false;
 	}
-	wlr_output_update_needs_frame(output);
 	return true;
 }
 
@@ -1018,11 +1017,7 @@ static bool drm_connector_move_cursor(struct wlr_output *output,
 		}
 		conn->cursor_visible = visible;
 	}
-	bool ok = drm_legacy_crtc_move_cursor(drm,conn->crtc,box.x,box.y);
-	if (ok) {
-		wlr_output_update_needs_frame(output);
-	}
-	return true;
+	return drm_legacy_crtc_move_cursor(drm,conn->crtc,box.x,box.y);
 }
 
 bool drm_connector_is_cursor_visible(struct wlr_drm_connector *conn) {
