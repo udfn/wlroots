@@ -97,7 +97,7 @@ bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
 
 	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		if (drmModePageFlip(drm->fd, crtc->id, fb_id,
-				DRM_MODE_PAGE_FLIP_EVENT, drm)) {
+				flags, drm)) {
 			wlr_drm_conn_log_errno(conn, WLR_ERROR, "drmModePageFlip failed");
 			return false;
 		}
