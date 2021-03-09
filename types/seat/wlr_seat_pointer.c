@@ -6,6 +6,7 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland.h>
 #include "types/wlr_seat.h"
 #include "util/signal.h"
 #include "util/array.h"
@@ -184,6 +185,12 @@ void wlr_seat_pointer_enter(struct wlr_seat *wlr_seat,
 				wl_fixed_from_double(sx), wl_fixed_from_double(sy));
 			pointer_send_frame(resource);
 		}
+#if WLR_HAS_XWAYLAND
+		if (wlr_surface_is_xwayland_surface(surface)) {
+			wlr_xwayland_surface_set_stack_mode(
+				wlr_xwayland_surface_from_wlr_surface(surface), XCB_STACK_MODE_ABOVE);
+		}
+#endif
 	}
 
 	// reinitialize the focus destroy events

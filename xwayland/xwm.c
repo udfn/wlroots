@@ -1939,6 +1939,15 @@ struct wlr_xwm *xwm_create(struct wlr_xwayland *xwayland, int wm_fd) {
 	return xwm;
 }
 
+void wlr_xwayland_surface_set_stack_mode(struct wlr_xwayland_surface *surface,
+		xcb_stack_mode_t stack_mode) {
+	uint32_t values[1];
+	values[0] = stack_mode;
+	xcb_configure_window(surface->xwm->xcb_conn, surface->window_id,
+			XCB_CONFIG_WINDOW_STACK_MODE, values);
+	xcb_flush(surface->xwm->xcb_conn);
+}
+
 void wlr_xwayland_surface_set_minimized(struct wlr_xwayland_surface *surface,
 		bool minimized) {
 	surface->minimized = minimized;

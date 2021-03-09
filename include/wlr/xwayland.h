@@ -274,6 +274,9 @@ void wlr_xwayland_surface_configure(struct wlr_xwayland_surface *surface,
 
 void wlr_xwayland_surface_close(struct wlr_xwayland_surface *surface);
 
+void wlr_xwayland_surface_set_stack_mode(struct wlr_xwayland_surface * surface,
+	xcb_stack_mode_t stack_mode);
+
 void wlr_xwayland_surface_set_minimized(struct wlr_xwayland_surface *surface,
 	bool minimized);
 
