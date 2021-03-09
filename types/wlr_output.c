@@ -320,6 +320,31 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	wlr_output_destroy_global(output);
 }
 
+static void schedule_frame_handle_idle_timer(void *data) {
+	struct wlr_output *output = data;
+	output->idle_frame = NULL;
+	if (!output->frame_pending) {
+		wlr_output_send_frame(output);
+	}
+}
+
+static int wlr_output_present_timeout(void *data) {
+	struct wlr_output *output = (struct wlr_output*)data;
+	if (!output->needs_frame) {
+		wl_event_source_timer_update(output->present_timeout, 1000);
+		return 0;
+	}
+	if (output->frame_pending || output->idle_frame != NULL) {
+		return 0;
+	}
+	// We're using an idle timer here in case a buffer swap happens right after
+	// this function is called
+	struct wl_event_loop *ev = wl_display_get_event_loop(output->display);
+	output->idle_frame =
+		wl_event_loop_add_idle(ev, schedule_frame_handle_idle_timer, output);
+		return 0;
+}
+
 void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 		const struct wlr_output_impl *impl, struct wl_display *display) {
 	assert(impl->attach_render && impl->rollback_render && impl->commit);
@@ -334,6 +359,8 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	output->scale = 1;
 	output->commit_seq = 0;
 	output->present_mode = WLR_OUTPUT_PRESENT_MODE_NORMAL;
+	output->present_timeout = wl_event_loop_add_timer(wl_display_get_event_loop(display),
+		wlr_output_present_timeout, output);
 	wl_list_init(&output->cursors);
 	wl_list_init(&output->resources);
 	wl_signal_init(&output->events.frame);
@@ -365,6 +392,7 @@ void wlr_output_destroy(struct wlr_output *output) {
 		return;
 	}
 
+	wl_event_source_remove(output->present_timeout);
 	wl_list_remove(&output->display_destroy.link);
 	wlr_output_destroy_global(output);
 
@@ -643,6 +671,12 @@ bool wlr_output_commit(struct wlr_output *output) {
 		output->needs_frame = false;
 	}
 
+	if (output->present_mode != WLR_OUTPUT_PRESENT_MODE_NORMAL) {
+		wl_event_source_timer_update(output->present_timeout, 1000);
+	} else {
+		wl_event_source_timer_update(output->present_timeout, 0);
+	}
+
 	uint32_t committed = output->pending.committed;
 	output_state_clear(&output->pending);
 
@@ -677,14 +711,6 @@ void wlr_output_attach_buffer(struct wlr_output *output,
 void wlr_output_send_frame(struct wlr_output *output) {
 	output->frame_pending = false;
 	wlr_signal_emit_safe(&output->events.frame, output);
-}
-
-static void schedule_frame_handle_idle_timer(void *data) {
-	struct wlr_output *output = data;
-	output->idle_frame = NULL;
-	if (!output->frame_pending) {
-		wlr_output_send_frame(output);
-	}
 }
 
 void wlr_output_schedule_frame(struct wlr_output *output) {
