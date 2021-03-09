@@ -101,6 +101,15 @@ struct wlr_output_state {
 	size_t gamma_lut_size;
 };
 
+enum wlr_output_present_mode {
+	// The standard present mode, waits for vblank before showing.
+	WLR_OUTPUT_PRESENT_MODE_NORMAL = 0,
+	// Immediately present the pending frame without waiting for vblank.
+	WLR_OUTPUT_PRESENT_MODE_IMMEDIATE,
+	// Waits for vblank unless framerate is less than display refresh rate.
+	WLR_OUTPUT_PRESENT_MODE_ADAPTIVE
+};
+
 struct wlr_output_impl;
 
 /**
@@ -140,6 +149,7 @@ struct wlr_output {
 	enum wl_output_subpixel subpixel;
 	enum wl_output_transform transform;
 	enum wlr_output_adaptive_sync_status adaptive_sync_status;
+	enum wlr_output_present_mode present_mode;
 
 	bool needs_frame;
 	// damage for cursors and fullscreen surface, in output-local coordinates

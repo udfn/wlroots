@@ -124,6 +124,8 @@ struct wlr_drm_connector {
 
 	union wlr_drm_connector_props props;
 
+	struct timespec next_present;
+
 	int32_t cursor_x, cursor_y;
 	bool cursor_visible;
 

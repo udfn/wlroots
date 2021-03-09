@@ -1,4 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
+#include <time.h>
 #include <gbm.h>
 #include <stdlib.h>
 #include <wlr/util/log.h>
@@ -8,7 +10,7 @@
 #include "backend/drm/iface.h"
 #include "backend/drm/util.h"
 
-static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
+bool drm_legacy_crtc_commit(struct wlr_drm_backend *drm,
 		struct wlr_drm_connector *conn, uint32_t flags) {
 	struct wlr_output *output = &conn->output;
 	struct wlr_drm_crtc *crtc = conn->crtc;
@@ -22,6 +24,27 @@ static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
 			return false;
 		}
 		fb_id = fb->id;
+	}
+
+	switch (conn->output.present_mode) {
+		case WLR_OUTPUT_PRESENT_MODE_IMMEDIATE:
+			flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+			break;
+		case WLR_OUTPUT_PRESENT_MODE_ADAPTIVE: {
+			struct timespec cur;
+			clock_gettime(CLOCK_MONOTONIC, &cur);
+			// I'm sure this messy logic can be simplified..
+			if (cur.tv_sec == conn->next_present.tv_sec) {
+				if (cur.tv_nsec > conn->next_present.tv_nsec) {
+					// rats, we missed vblank, flip immediately!
+					flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+				}
+			} else if (cur.tv_sec > conn->next_present.tv_sec) {
+				flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+			}
+			break;
+		}
+		default:break;
 	}
 
 	if (crtc->pending_modeset) {
@@ -75,7 +98,7 @@ static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
 
 	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		if (drmModePageFlip(drm->fd, crtc->id, fb_id,
-				DRM_MODE_PAGE_FLIP_EVENT, drm)) {
+				flags, drm)) {
 			wlr_drm_conn_log_errno(conn, WLR_ERROR, "drmModePageFlip failed");
 			return false;
 		}
@@ -142,5 +165,5 @@ bool drm_legacy_crtc_set_cursor(struct wlr_drm_backend *drm,
 }
 
 const struct wlr_drm_interface legacy_iface = {
-	.crtc_commit = legacy_crtc_commit,
+	.crtc_commit = drm_legacy_crtc_commit,
 };

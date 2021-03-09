@@ -330,7 +330,14 @@ static void drm_plane_set_committed(struct wlr_drm_plane *plane) {
 static bool drm_crtc_commit(struct wlr_drm_connector *conn, uint32_t flags) {
 	struct wlr_drm_backend *drm = conn->backend;
 	struct wlr_drm_crtc *crtc = conn->crtc;
-	bool ok = drm->iface->crtc_commit(drm, conn, flags);
+	bool ok;
+	// Use legacy when not using normal present mode since AMS doesn't
+	// allow async pageflips..
+	if (conn->output.present_mode != WLR_OUTPUT_PRESENT_MODE_NORMAL) {
+		ok = drm_legacy_crtc_commit(drm, conn, flags);
+	} else {
+		ok = drm->iface->crtc_commit(drm, conn, flags);
+	}
 	if (ok && !(flags & DRM_MODE_ATOMIC_TEST_ONLY)) {
 		memcpy(&crtc->current, &crtc->pending, sizeof(struct wlr_drm_crtc_state));
 		drm_plane_set_committed(crtc->primary);
@@ -1491,9 +1498,24 @@ static void page_flip_handler(int fd, unsigned seq,
 		drm_fb_move(&conn->crtc->cursor->current_fb,
 			&conn->crtc->cursor->queued_fb);
 	}
+	struct timespec present_time = {
+		.tv_sec = tv_sec,
+		.tv_nsec = tv_usec * 1000,
+	};
 
-	uint32_t present_flags = WLR_OUTPUT_PRESENT_VSYNC |
-		WLR_OUTPUT_PRESENT_HW_CLOCK | WLR_OUTPUT_PRESENT_HW_COMPLETION;
+	int refresh = mhz_to_nsec(conn->output.refresh);
+	uint32_t present_flags = WLR_OUTPUT_PRESENT_HW_CLOCK |
+		WLR_OUTPUT_PRESENT_HW_COMPLETION;
+	if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_NORMAL) {
+		present_flags |= WLR_OUTPUT_PRESENT_VSYNC;
+	} else if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_ADAPTIVE) {
+		conn->next_present.tv_sec = tv_sec;
+		conn->next_present.tv_nsec = present_time.tv_nsec + refresh;
+		if (conn->next_present.tv_nsec > 1000000000) {
+			conn->next_present.tv_nsec -= 1000000000;
+			conn->next_present.tv_sec++;
+		}
+	}
 	/* Don't report ZERO_COPY in multi-gpu situations, because we had to copy
 	 * data between the GPUs, even if we were using the direct scanout
 	 * interface.
@@ -1503,17 +1525,13 @@ static void page_flip_handler(int fd, unsigned seq,
 		present_flags |= WLR_OUTPUT_PRESENT_ZERO_COPY;
 	}
 
-	struct timespec present_time = {
-		.tv_sec = tv_sec,
-		.tv_nsec = tv_usec * 1000,
-	};
 	struct wlr_output_event_present present_event = {
 		/* The DRM backend guarantees that the presentation event will be for
 		 * the last submitted frame. */
 		.commit_seq = conn->output.commit_seq,
 		.when = &present_time,
 		.seq = seq,
-		.refresh = mhz_to_nsec(conn->output.refresh),
+		.refresh = refresh,
 		.flags = present_flags,
 	};
 	wlr_output_send_present(&conn->output, &present_event);

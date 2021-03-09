@@ -333,6 +333,7 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	output->transform = WL_OUTPUT_TRANSFORM_NORMAL;
 	output->scale = 1;
 	output->commit_seq = 0;
+	output->present_mode = WLR_OUTPUT_PRESENT_MODE_NORMAL;
 	wl_list_init(&output->cursors);
 	wl_list_init(&output->resources);
 	wl_signal_init(&output->events.frame);
@@ -692,7 +693,8 @@ void wlr_output_schedule_frame(struct wlr_output *output) {
 	// work.
 	wlr_output_update_needs_frame(output);
 
-	if (output->frame_pending || output->idle_frame != NULL) {
+	if (output->frame_pending || output->idle_frame != NULL
+		|| output->present_mode != WLR_OUTPUT_PRESENT_MODE_NORMAL) {
 		return;
 	}
 

@@ -204,6 +204,10 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 		flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
 	} else {
 		flags |= DRM_MODE_ATOMIC_NONBLOCK;
+		// AMS immediately rejects the commit if DRM_MODE_PAGE_FLIP_ASYNC is used..
+		//if (conn->output.present_mode == WLR_OUTPUT_PRESENT_MODE_IMMEDIATE) {
+		//	flags |= DRM_MODE_PAGE_FLIP_ASYNC;
+		//}
 	}
 
 	struct atomic atom;
