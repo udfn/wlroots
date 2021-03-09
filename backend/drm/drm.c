@@ -912,7 +912,7 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 		plane->cursor_hotspot_x = hotspot.x;
 		plane->cursor_hotspot_y = hotspot.y;
 
-		wlr_output_update_needs_frame(output);
+		drm_legacy_crtc_move_cursor(drm, conn->crtc, conn->cursor_x, conn->cursor_y);
 	}
 
 	if (!update_texture) {
@@ -954,12 +954,11 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 		plane->cursor_enabled = true;
 	}
 
-	wlr_output_update_needs_frame(output);
-	return true;
+	return drm_legacy_crtc_set_cursor(drm, conn);
 }
 
 static bool drm_connector_move_cursor(struct wlr_output *output,
-		int x, int y) {
+		int x, int y, bool visible) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
 	if (!conn->crtc) {
 		return false;
@@ -984,8 +983,11 @@ static bool drm_connector_move_cursor(struct wlr_output *output,
 	conn->cursor_x = box.x;
 	conn->cursor_y = box.y;
 
-	wlr_output_update_needs_frame(output);
-	return true;
+	if (visible != conn->cursor_visible) {
+		conn->cursor_visible = visible;
+		drm_legacy_crtc_set_cursor(conn->backend, conn);
+	}
+	return drm_legacy_crtc_move_cursor(conn->backend, conn->crtc, box.x, box.y);
 }
 
 bool drm_connector_is_cursor_visible(struct wlr_drm_connector *conn) {

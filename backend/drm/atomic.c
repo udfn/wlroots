@@ -225,14 +225,6 @@ static bool atomic_crtc_commit(struct wlr_drm_backend *drm,
 			atomic_add(&atom, crtc->id, crtc->props.vrr_enabled, vrr_enabled);
 		}
 		set_plane_props(&atom, drm, crtc->primary, crtc->id, 0, 0);
-		if (crtc->cursor) {
-			if (drm_connector_is_cursor_visible(conn)) {
-				set_plane_props(&atom, drm, crtc->cursor, crtc->id,
-					conn->cursor_x, conn->cursor_y);
-			} else {
-				plane_disable(&atom, crtc->cursor);
-			}
-		}
 	} else {
 		plane_disable(&atom, crtc->primary);
 		if (crtc->cursor) {

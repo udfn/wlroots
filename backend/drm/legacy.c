@@ -12,7 +12,6 @@ static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
 		struct wlr_drm_connector *conn, uint32_t flags) {
 	struct wlr_output *output = &conn->output;
 	struct wlr_drm_crtc *crtc = conn->crtc;
-	struct wlr_drm_plane *cursor = crtc->cursor;
 
 	uint32_t fb_id = 0;
 	if (crtc->pending.active) {
@@ -74,34 +73,6 @@ static bool legacy_crtc_commit(struct wlr_drm_backend *drm,
 			output->pending.adaptive_sync_enabled ? "enabled" : "disabled");
 	}
 
-	if (cursor != NULL && drm_connector_is_cursor_visible(conn)) {
-		struct wlr_drm_fb *cursor_fb = plane_get_next_fb(cursor);
-		if (cursor_fb == NULL) {
-			wlr_drm_conn_log(conn, WLR_DEBUG, "Failed to acquire cursor FB");
-			return false;
-		}
-
-		uint32_t cursor_handle = gbm_bo_get_handle(cursor_fb->bo).u32;
-		uint32_t cursor_width = gbm_bo_get_width(cursor_fb->bo);
-		uint32_t cursor_height = gbm_bo_get_height(cursor_fb->bo);
-		if (drmModeSetCursor(drm->fd, crtc->id, cursor_handle,
-				cursor_width, cursor_height)) {
-			wlr_drm_conn_log_errno(conn, WLR_DEBUG, "drmModeSetCursor failed");
-			return false;
-		}
-
-		if (drmModeMoveCursor(drm->fd,
-			crtc->id, conn->cursor_x, conn->cursor_y) != 0) {
-			wlr_drm_conn_log_errno(conn, WLR_ERROR, "drmModeMoveCursor failed");
-			return false;
-		}
-	} else {
-		if (drmModeSetCursor(drm->fd, crtc->id, 0, 0, 0)) {
-			wlr_drm_conn_log_errno(conn, WLR_DEBUG, "drmModeSetCursor failed");
-			return false;
-		}
-	}
-
 	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		if (drmModePageFlip(drm->fd, crtc->id, fb_id,
 				DRM_MODE_PAGE_FLIP_EVENT, drm)) {
@@ -152,6 +123,22 @@ bool drm_legacy_crtc_set_gamma(struct wlr_drm_backend *drm,
 
 	free(linear_lut);
 	return true;
+}
+
+bool drm_legacy_crtc_move_cursor(struct wlr_drm_backend *drm,
+	struct wlr_drm_crtc *crtc, int x, int y) {
+	return !drmModeMoveCursor(drm->fd, crtc->id, x, y);
+}
+
+bool drm_legacy_crtc_set_cursor(struct wlr_drm_backend *drm,
+	struct wlr_drm_connector *conn) {
+	struct wlr_drm_plane *cursor = conn->crtc->cursor;
+	if (!cursor->cursor_enabled || !conn->cursor_visible) {
+		return !drmModeSetCursor(drm->fd,conn->crtc->id,0,0,0);
+	}
+	struct wlr_drm_fb *cursor_fb = plane_get_next_fb(cursor);
+	return !drmModeSetCursor(drm->fd, conn->crtc->id, gbm_bo_get_handle(cursor_fb->bo).u32,
+		cursor->surf.width, cursor->surf.height);
 }
 
 const struct wlr_drm_interface legacy_iface = {

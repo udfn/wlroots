@@ -514,7 +514,7 @@ void update_wl_output_cursor(struct wlr_wl_output *output) {
 	}
 }
 
-static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
+static bool output_move_cursor(struct wlr_output *_output, int x, int y, bool visible) {
 	// TODO: only return true if x == current x and y == current y
 	return true;
 }

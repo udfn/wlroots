@@ -503,7 +503,7 @@ static bool output_set_cursor(struct wlr_output *wlr_output,
 	return success;
 }
 
-static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
+static bool output_move_cursor(struct wlr_output *_output, int x, int y, bool visible) {
 	// TODO: only return true if x == current x and y == current y
 	return true;
 }

@@ -44,7 +44,7 @@ struct wlr_output_impl {
 	 *
 	 * The position is relative to the cursor hotspot, see set_cursor.
 	 */
-	bool (*move_cursor)(struct wlr_output *output, int x, int y);
+	bool (*move_cursor)(struct wlr_output *output, int x, int y, bool visible);
 	/**
 	 * Cleanup backend-specific resources tied to the output.
 	 */

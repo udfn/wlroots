@@ -1009,7 +1009,7 @@ static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 		// cursor position is outdated
 		assert(cursor->output->impl->move_cursor);
 		cursor->output->impl->move_cursor(cursor->output,
-			(int)cursor->x, (int)cursor->y);
+			(int)cursor->x, (int)cursor->y, true);
 		if (cursor->output->impl->set_cursor(cursor->output, texture,
 				scale, transform, cursor->hotspot_x, cursor->hotspot_y, true)) {
 			cursor->output->hardware_cursor = cursor;
@@ -1178,7 +1178,7 @@ bool wlr_output_cursor_move(struct wlr_output_cursor *cursor,
 	}
 
 	assert(cursor->output->impl->move_cursor);
-	return cursor->output->impl->move_cursor(cursor->output, (int)x, (int)y);
+	return cursor->output->impl->move_cursor(cursor->output, (int)x, (int)y, cursor->visible);
 }
 
 struct wlr_output_cursor *wlr_output_cursor_create(struct wlr_output *output) {
